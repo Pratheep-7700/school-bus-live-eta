@@ -1,0 +1,32 @@
+{
+  "is_running": false,
+  "current_time": "08:16 AM",
+  "tick_count": 18,
+  "bus_states": {
+    "101": {
+      "route_id": "Route 1",
+      "current_stop_index": 3,
+      "status": "COMPLETED",
+      "dwell_remaining_secs": 0,
+      "next_stop_id": "Stop_B",
+      "last_eta": "08:20 AM"
+    },
+    "102": {
+      "route_id": "Route 2",
+      "current_stop_index": 3,
+      "status": "ON_ROUTE",
+      "dwell_remaining_secs": 0,
+      "next_stop_id": "School_2",
+      "last_eta": "08:24 AM"
+    },
+    "103": {
+      "route_id": "Route 3",
+      "current_stop_index": 3,
+      "status": "COMPLETED",
+      "dwell_remaining_secs": 0,
+      "next_stop_id": "School_3",
+      "last_eta": "08:20 AM"
+    }
+  },
+  "store_and_forward_queue": []
+}

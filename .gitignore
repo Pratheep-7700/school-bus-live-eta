@@ -1,0 +1,30 @@
+# Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Environment variables & secrets
+.env
+.env.*
+*.env
+
+# SQLite runtime database
+*.db
+*.sqlite3
+*.sqlite
+database/school_bus.db
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.bak
+*.swp

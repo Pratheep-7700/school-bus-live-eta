@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}Student Attendance{% endblock %}
+{% block page_header %}Student Attendance & Boarding Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Attendance Summary cards -->
+    <div class="col-lg-12 mb-4">
+        <div class="card bg-white border-0 shadow-sm p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                    <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-calculator text-primary me-2"></i> Attendance Boarding Formula</h5>
+                    <p class="m-0 text-muted mt-1">Dwell Time = 30 seconds (base) + 20 seconds (per present student)</p>
+                </div>
+                <div class="d-flex gap-4 align-items-center">
+                    <div class="text-center">
+                        <span class="d-block text-muted small uppercase font-weight-bold">Present Students</span>
+                        <h3 class="m-0 font-weight-bold text-success" id="summary-present-count">30</h3>
+                    </div>
+                    <div class="vr"></div>
+                    <div class="text-center">
+                        <span class="d-block text-muted small uppercase font-weight-bold">Absent Students</span>
+                        <h3 class="m-0 font-weight-bold text-danger" id="summary-absent-count">0</h3>
+                    </div>
+                    <div class="vr"></div>
+                    <div class="text-center">
+                        <span class="d-block text-muted small uppercase font-weight-bold">Total Boarding Time</span>
+                        <h3 class="m-0 font-weight-bold text-primary" id="summary-boarding-mins">10.5m</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Student Lists by Route -->
+    <div class="col-lg-4 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-primary text-white py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-route me-2"></i> Route 1 - North Valley</h5>
+            </div>
+            <div class="card-body p-3">
+                <div id="attendance-route1-list">
+                    <!-- Loaded dynamically -->
+                    <div class="text-center text-muted py-4">Loading students...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-success text-white py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-route me-2"></i> Route 2 - East Highlands</h5>
+            </div>
+            <div class="card-body p-3">
+                <div id="attendance-route2-list">
+                    <!-- Loaded dynamically -->
+                    <div class="text-center text-muted py-4">Loading students...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-info text-white py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-route me-2"></i> Route 3 - West Bay</h5>
+            </div>
+            <div class="card-body p-3">
+                <div id="attendance-route3-list">
+                    <!-- Loaded dynamically -->
+                    <div class="text-center text-muted py-4">Loading students...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('nav-attendance').classList.add('active');
+
+    function loadAttendance() {
+        fetch('/api/students')
+            .then(res => res.json())
+            .then(students => {
+                let presentCount = 0;
+                let absentCount = 0;
+                
+                // Group students by route
+                const groups = {
+                    'Route 1': [],
+                    'Route 2': [],
+                    'Route 3': []
+                };
+
+                students.forEach(s => {
+                    if (s.attendance_status === 'Present') {
+                        presentCount++;
+                    } else {
+                        absentCount++;
+                    }
+                    groups[s.route_id].push(s);
+                });
+
+                // Update summary counters
+                document.getElementById('summary-present-count').innerText = presentCount;
+                document.getElementById('summary-absent-count').innerText = absentCount;
+                
+                // Calculate boarding time in minutes
+                // For stops, find how many unique stops have present students
+                const uniqueStops = new Set(students.filter(s => s.attendance_status === 'Present').map(s => s.stop_id));
+                const totalDwellSecs = (uniqueStops.size * 30) + (presentCount * 20);
+                const totalDwellMins = (totalDwellSecs / 60).toFixed(1);
+                document.getElementById('summary-boarding-mins').innerText = `${totalDwellMins}m`;
+
+                // Render student lists
+                Object.keys(groups).forEach(routeId => {
+                    const containerId = 'attendance-' + routeId.toLowerCase().replace(' ', '') + '-list';
+                    const container = document.getElementById(containerId);
+                    if (!container) return;
+                    
+                    if (groups[routeId].length === 0) {
+                        container.innerHTML = '<div class="text-center text-muted py-3">No students on this route.</div>';
+                        return;
+                    }
+
+                    let html = '<ul class="list-group list-group-flush">';
+                    groups[routeId].forEach(s => {
+                        const isPresent = s.attendance_status === 'Present';
+                        html += `
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-3">
+                                <div>
+                                    <strong class="d-block">${s.student_name}</strong>
+                                    <span class="text-muted small"><i class="fa-solid fa-location-pin me-1"></i> ${s.stop_name}</span>
+                                    <span class="badge bg-light text-dark ms-2" title="Committed pickup time">
+                                        <i class="fa-regular fa-clock me-1 text-primary"></i>${s.committed_pickup_time}
+                                    </span>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" 
+                                           id="switch-${s.student_id}" ${isPresent ? 'checked' : ''}
+                                           onchange="toggleAttendance('${s.student_id}', this.checked)">
+                                    <label class="form-check-label text-muted small" for="switch-${s.student_id}">
+                                        ${isPresent ? 'Present' : 'Absent'}
+                                    </label>
+                                </div>
+                            </li>
+                        `;
+                    });
+                    html += '</ul>';
+                    container.innerHTML = html;
+                });
+            })
+            .catch(err => {
+                console.error("Error loading attendance:", err);
+            });
+    }
+
+    function toggleAttendance(studentId, isChecked) {
+        const status = isChecked ? 'Present' : 'Absent';
+        
+        // Update label text immediately for smooth UI transition
+        const label = document.querySelector(`label[for="switch-${studentId}"]`);
+        if (label) {
+            label.innerText = status;
+        }
+
+        fetch('/api/attendance', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                student_id: studentId,
+                status: status
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                // Refresh to update summaries and charts
+                loadAttendance();
+                // Send an event to reload simulation status if active
+                if (window.refreshSimState) {
+                    window.refreshSimState();
+                }
+            } else {
+                alert("Failed to update attendance status.");
+            }
+        })
+        .catch(err => {
+            console.error("Error toggling attendance:", err);
+        });
+    }
+
+    // Load initial data on mount
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAttendance();
+    });
+
+</script>
+{% endblock %}

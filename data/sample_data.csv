@@ -1,0 +1,10 @@
+route_id,stop_name,planned_arrival,lat,lon
+Route 1,Stop A - Oak St,08:00 AM,37.7949,-122.4394
+Route 1,Stop B - Pine St,08:10 AM,37.7889,-122.4294
+Route 1,Stop C - Maple Ave,08:20 AM,37.7819,-122.4244
+Route 2,Stop D - Elm Rd,08:00 AM,37.7549,-122.4494
+Route 2,Stop E - Cedar Ln,08:10 AM,37.7609,-122.4394
+Route 2,Stop F - Birch Blvd,08:20 AM,37.7689,-122.4294
+Route 3,Stop G - Willow Dr,08:00 AM,37.7549,-122.3994
+Route 3,Stop H - Spruce Way,08:10 AM,37.7609,-122.4094
+Route 3,Stop I - Redwood Ct,08:20 AM,37.7689,-122.4144

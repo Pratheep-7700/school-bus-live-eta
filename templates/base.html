@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>School Bus ETA - {% block title %}Dashboard{% endblock %}</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fa-solid fa-bus"></i>
+                    <span>BusETA</span>
+                </a>
+            </div>
+            <ul class="sidebar-menu">
+                <li class="sidebar-item" id="nav-dashboard">
+                    <a href="/dashboard" class="sidebar-link">
+                        <i class="fa-solid fa-chart-line"></i> Dashboard
+                    </a>
+                </li>
+                <li class="sidebar-item" id="nav-tracking">
+                    <a href="/live_tracking" class="sidebar-link">
+                        <i class="fa-solid fa-map-location-dot"></i> Live Tracking
+                    </a>
+                </li>
+                <li class="sidebar-item" id="nav-attendance">
+                    <a href="/attendance" class="sidebar-link">
+                        <i class="fa-solid fa-clipboard-user"></i> Attendance
+                    </a>
+                </li>
+                <li class="sidebar-item" id="nav-routes">
+                    <a href="/routes" class="sidebar-link">
+                        <i class="fa-solid fa-route"></i> Routes
+                    </a>
+                </li>
+                <li class="sidebar-item" id="nav-history">
+                    <a href="/eta_history" class="sidebar-link">
+                        <i class="fa-solid fa-history"></i> ETA History
+                    </a>
+                </li>
+                <li class="sidebar-item" id="nav-failures">
+                    <a href="/failures" class="sidebar-link">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Failures
+                    </a>
+                </li>
+                <li class="sidebar-item" id="nav-experiment">
+                    <a href="/experiment" class="sidebar-link">
+                        <i class="fa-solid fa-flask"></i> Experiment
+                    </a>
+                </li>
+                <li class="sidebar-item" id="nav-reports">
+                    <a href="/reports" class="sidebar-link">
+                        <i class="fa-solid fa-chart-pie"></i> Reports
+                    </a>
+                </li>
+                <li class="sidebar-item" id="nav-feedback">
+                    <a href="/feedback" class="sidebar-link">
+                        <i class="fa-solid fa-comment-dots"></i> Feedback
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Main Body -->
+        <div class="main-content">
+            <!-- Header -->
+            <header class="top-header">
+                <div>
+                    <h1 class="page-title">{% block page_header %}Dashboard{% endblock %}</h1>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <div id="sim-clock-badge" class="badge bg-dark fs-6 py-2 px-3">
+                        <i class="fa-regular fa-clock me-2"></i>Clock: <span id="sim-clock-time">07:58 AM</span>
+                    </div>
+                    <div id="sim-state-indicator" class="simulation-indicator-badge simulation-paused">
+                        <span class="status-indicator status-warning"></span>Simulation Paused
+                    </div>
+                </div>
+            </header>
+
+            <!-- Notification Alerts & Top controls -->
+            <div class="content-wrapper">
+                <!-- Top controls -->
+                <div class="control-panel">
+                    <h5 class="m-0 me-3"><i class="fa-solid fa-sliders"></i> Simulator Controls:</h5>
+                    <button class="btn btn-success" id="btn-sim-start">
+                        <i class="fa-solid fa-play me-1"></i> Start
+                    </button>
+                    <button class="btn btn-warning text-white" id="btn-sim-pause">
+                        <i class="fa-solid fa-pause me-1"></i> Pause
+                    </button>
+                    <button class="btn btn-secondary" id="btn-sim-tick">
+                        <i class="fa-solid fa-forward me-1"></i> Step (+1m)
+                    </button>
+                    <button class="btn btn-danger" id="btn-sim-reset">
+                        <i class="fa-solid fa-rotate-left me-1"></i> Reset
+                    </button>
+                    <div class="vr mx-2"></div>
+                    <button class="btn btn-primary" id="btn-run-demo">
+                        <i class="fa-solid fa-circle-play me-1"></i> Run Demo Scenario
+                    </button>
+                </div>
+
+                <!-- Main View Content -->
+                {% block content %}{% endblock %}
+            </div>
+
+            <!-- Demo scenario overlay if running -->
+            <div class="demo-bar d-none" id="demo-scenario-bar">
+                <div>
+                    <span class="demo-step-badge me-2" id="demo-step-num">Step 1</span>
+                    <strong id="demo-step-title">Bus starts on time.</strong>
+                    <p class="m-0 text-muted" id="demo-step-desc">The simulation starts at 07:58 AM on a clear route.</p>
+                </div>
+                <div>
+                    <button class="btn btn-outline-light" id="btn-demo-next">Next Step <i class="fa-solid fa-arrow-right"></i></button>
+                    <button class="btn btn-sm btn-danger ms-2" id="btn-demo-close">Exit Demo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Common JS dependencies -->
+    <script src="{{ url_for('static', filename='js/simulation.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,225 @@
+{% extends 'base.html' %}
+
+{% block title %}User Feedback{% endblock %}
+{% block page_header %}User Validation & System Feedback{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Feedback Form Column -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-pen-to-square text-primary me-2"></i> Submit System Validation Survey</h5>
+            </div>
+            <div class="card-body">
+                <form id="form-feedback-survey">
+                    <!-- Q1 -->
+                    <div class="mb-4">
+                        <label class="form-label font-weight-bold d-block small">1. Is the ETA easy to understand?</label>
+                        <div class="d-flex justify-content-between text-muted small px-1 mb-1">
+                            <span>Strongly Disagree</span>
+                            <span>Strongly Agree</span>
+                        </div>
+                        <input type="range" class="form-range" min="1" max="5" id="rating-q1" required>
+                    </div>
+                    <!-- Q2 -->
+                    <div class="mb-4">
+                        <label class="form-label font-weight-bold d-block small">2. Is the delay explanation useful?</label>
+                        <div class="d-flex justify-content-between text-muted small px-1 mb-1">
+                            <span>Strongly Disagree</span>
+                            <span>Strongly Agree</span>
+                        </div>
+                        <input type="range" class="form-range" min="1" max="5" id="rating-q2" required>
+                    </div>
+                    <!-- Q3 -->
+                    <div class="mb-4">
+                        <label class="form-label font-weight-bold d-block small">3. Does the system make you trust the ETA more?</label>
+                        <div class="d-flex justify-content-between text-muted small px-1 mb-1">
+                            <span>Strongly Disagree</span>
+                            <span>Strongly Agree</span>
+                        </div>
+                        <input type="range" class="form-range" min="1" max="5" id="rating-q3" required>
+                    </div>
+                    <!-- Q4 -->
+                    <div class="mb-4">
+                        <label class="form-label font-weight-bold d-block small">4. Would this system reduce the need to contact the school for bus status?</label>
+                        <div class="d-flex justify-content-between text-muted small px-1 mb-1">
+                            <span>Strongly Disagree</span>
+                            <span>Strongly Agree</span>
+                        </div>
+                        <input type="range" class="form-range" min="1" max="5" id="rating-q4" required>
+                    </div>
+                    <!-- Q5 -->
+                    <div class="mb-4">
+                        <label class="form-label font-weight-bold d-block small">5. Is the in-app notification clear?</label>
+                        <div class="d-flex justify-content-between text-muted small px-1 mb-1">
+                            <span>Strongly Disagree</span>
+                            <span>Strongly Agree</span>
+                        </div>
+                        <input type="range" class="form-range" min="1" max="5" id="rating-q5" required>
+                    </div>
+                    <!-- Comments -->
+                    <div class="mb-3">
+                        <label for="feedback-comments" class="form-label font-weight-bold small">Additional Comments or Suggestions</label>
+                        <textarea class="form-control" id="feedback-comments" rows="3" placeholder="Tell us what you think..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 font-weight-bold py-2">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Submit Survey Response
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary of User Validation Feedback -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-square-poll-horizontal text-success me-2"></i> Feedback Summary Summary</h5>
+                <span class="badge bg-success" id="feedback-total-count">0 Responses</span>
+            </div>
+            <div class="card-body">
+                <div class="mb-4 text-center d-none" id="feedback-empty-state">
+                    <i class="fa-regular fa-comment-dots text-muted display-4"></i>
+                    <p class="text-muted mt-2">No user feedback survey data collected yet. Submit the form on the left to initialize validation summary.</p>
+                </div>
+                
+                <div id="feedback-scores-area">
+                    <!-- Q1 average progress -->
+                    <div class="mb-3">
+                        <span class="font-weight-bold small d-block">Q1: ETA clarity rating: <strong class="text-success" id="avg-score-q1">0.0</strong> / 5.0</span>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: 0%;" id="progress-q1"></div>
+                        </div>
+                    </div>
+                    <!-- Q2 average progress -->
+                    <div class="mb-3">
+                        <span class="font-weight-bold small d-block">Q2: Explanation usefulness: <strong class="text-success" id="avg-score-q2">0.0</strong> / 5.0</span>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: 0%;" id="progress-q2"></div>
+                        </div>
+                    </div>
+                    <!-- Q3 average progress -->
+                    <div class="mb-3">
+                        <span class="font-weight-bold small d-block">Q3: Increased trust: <strong class="text-success" id="avg-score-q3">0.0</strong> / 5.0</span>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: 0%;" id="progress-q3"></div>
+                        </div>
+                    </div>
+                    <!-- Q4 average progress -->
+                    <div class="mb-3">
+                        <span class="font-weight-bold small d-block">Q4: Reduction in phone inquiries: <strong class="text-success" id="avg-score-q4">0.0</strong> / 5.0</span>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: 0%;" id="progress-q4"></div>
+                        </div>
+                    </div>
+                    <!-- Q5 average progress -->
+                    <div class="mb-3">
+                        <span class="font-weight-bold small d-block">Q5: Notification clarity: <strong class="text-success" id="avg-score-q5">0.0</strong> / 5.0</span>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: 0%;" id="progress-q5"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+                <h6 class="font-weight-bold mb-3"><i class="fa-solid fa-comments text-muted me-2"></i> Recent Comments</h6>
+                <div style="max-height: 200px; overflow-y: auto;" id="feedback-comments-feed">
+                    <!-- Comments loaded dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('nav-feedback').classList.add('active');
+
+    function loadFeedbackSummary() {
+        fetch('/api/feedback/summary')
+            .then(res => res.json())
+            .then(data => {
+                const totalBadge = document.getElementById('feedback-total-count');
+                totalBadge.innerText = `${data.count} Responses`;
+
+                if (data.count === 0) {
+                    document.getElementById('feedback-empty-state').classList.remove('d-none');
+                    document.getElementById('feedback-scores-area').classList.add('d-none');
+                    document.getElementById('feedback-comments-feed').innerHTML = '<div class="text-center text-muted small py-3">No reviews submitted yet.</div>';
+                    return;
+                }
+
+                document.getElementById('feedback-empty-state').classList.add('d-none');
+                document.getElementById('feedback-scores-area').classList.remove('d-none');
+
+                // Set scores and progress widths
+                const questions = ['q1', 'q2', 'q3', 'q4', 'q5'];
+                questions.forEach(q => {
+                    const val = data.averages[q];
+                    document.getElementById(`avg-score-${q}`).innerText = val.toFixed(1);
+                    const pct = (val / 5 * 100).toFixed(0);
+                    document.getElementById(`progress-${q}`).style.width = `${pct}%`;
+                });
+
+                // Load comments
+                let commentsHtml = '';
+                data.details.forEach(detail => {
+                    if (detail.comments && detail.comments.trim()) {
+                        commentsHtml += `
+                            <div class="p-2 mb-2 bg-light rounded border small">
+                                <span class="text-muted d-block" style="font-size: 0.75rem;">Time: ${detail.timestamp}</span>
+                                <p class="m-0 text-dark">${detail.comments}</p>
+                            </div>
+                        `;
+                    }
+                });
+                
+                document.getElementById('feedback-comments-feed').innerHTML = commentsHtml || '<div class="text-center text-muted small py-3">No text comments recorded.</div>';
+            });
+    }
+
+    document.getElementById('form-feedback-survey').addEventListener('submit', (e) => {
+        e.preventDefault();
+        
+        const payload = {
+            q1: document.getElementById('rating-q1').value,
+            q2: document.getElementById('rating-q2').value,
+            q3: document.getElementById('rating-q3').value,
+            q4: document.getElementById('rating-q4').value,
+            q5: document.getElementById('rating-q5').value,
+            comments: document.getElementById('feedback-comments').value
+        };
+
+        fetch('/api/feedback', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                // Clear fields
+                document.getElementById('feedback-comments').value = '';
+                document.getElementById('rating-q1').value = 3;
+                document.getElementById('rating-q2').value = 3;
+                document.getElementById('rating-q3').value = 3;
+                document.getElementById('rating-q4').value = 3;
+                document.getElementById('rating-q5').value = 3;
+                
+                alert("Feedback response saved successfully!");
+                loadFeedbackSummary();
+            } else {
+                alert("Failed to submit feedback survey.");
+            }
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadFeedbackSummary();
+    });
+</script>
+{% endblock %}

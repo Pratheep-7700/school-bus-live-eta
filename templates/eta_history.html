@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+
+{% block title %}ETA Audit History{% endblock %}
+{% block page_header %}ETA History & Audit Log{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Filter Card -->
+    <div class="col-lg-12 mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-filter text-primary me-2"></i> Filter Logs</h5>
+            </div>
+            <div class="card-body">
+                <form id="form-history-filter" class="row align-items-end g-3">
+                    <div class="col-md-3">
+                        <label for="filter-bus-id" class="form-label font-weight-bold small">Filter by Bus</label>
+                        <select class="form-select" id="filter-bus-id">
+                            <option value="all">All Buses</option>
+                            <option value="101">Bus 101</option>
+                            <option value="102">Bus 102</option>
+                            <option value="103">Bus 103</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="filter-reason" class="form-label font-weight-bold small">Search Reason / Cause</label>
+                        <input type="text" class="form-control" id="filter-reason" placeholder="e.g. Traffic, Boarding, GPS...">
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fa-solid fa-magnifying-glass me-1"></i> Apply Filters
+                        </button>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-outline-secondary w-100" id="btn-clear-filters">
+                            <i class="fa-solid fa-eraser me-1"></i> Clear
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Audit Table Card -->
+    <div class="col-lg-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-clock-rotate-left text-primary me-2"></i> ETA Modification Logs</h5>
+            </div>
+            <div class="table-responsive px-3">
+                <table class="table table-hover align-middle table-custom">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Bus ID</th>
+                            <th>Route</th>
+                            <th>Previous ETA</th>
+                            <th>New ETA</th>
+                            <th>Delta</th>
+                            <th>Explanation</th>
+                            <th>Traffic</th>
+                            <th>Students</th>
+                            <th>GPS</th>
+                            <th>Network</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-logs-table">
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-4">No audit logs available. Start simulation to generate events.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('nav-history').classList.add('active');
+
+    function loadHistory() {
+        const busId = document.getElementById('filter-bus-id').value;
+        const reason = encodeURIComponent(document.getElementById('filter-reason').value);
+        
+        let url = `/api/history/${busId}`;
+        if (reason) {
+            url += `?reason=${reason}`;
+        }
+
+        fetch(url)
+            .then(res => res.json())
+            .then(logs => {
+                const tbody = document.getElementById('history-logs-table');
+                if (logs.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-4">No matching logs found in audit history.</td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                logs.forEach(log => {
+                    const delta = parseFloat(log.delay_minutes);
+                    let deltaBadge = '';
+                    if (delta > 0) {
+                        deltaBadge = `<span class="badge bg-danger">+${delta.toFixed(1)}m</span>`;
+                    } else if (delta < 0) {
+                        deltaBadge = `<span class="badge bg-success">${delta.toFixed(1)}m</span>`;
+                    } else {
+                        deltaBadge = `<span class="badge bg-secondary">0.0m</span>`;
+                    }
+
+                    const sourceBadge = log.source === 'MANUAL' ? 
+                        `<span class="badge bg-warning text-white"><i class="fa-solid fa-keyboard me-1"></i>MANUAL</span>` : 
+                        `<span class="badge bg-info"><i class="fa-solid fa-robot me-1"></i>AUTO</span>`;
+
+                    const gpsBadge = log.gps_status === 'ONLINE' ? 
+                        `<span class="text-success small"><i class="fa-solid fa-signal"></i> ON</span>` : 
+                        `<span class="text-danger small font-weight-bold"><i class="fa-solid fa-ban"></i> OFF</span>`;
+
+                    const netBadge = log.network_status === 'ONLINE' ? 
+                        `<span class="text-success small"><i class="fa-solid fa-wifi"></i> ON</span>` : 
+                        `<span class="text-danger small font-weight-bold"><i class="fa-solid fa-ban"></i> OFF</span>`;
+
+                    html += `
+                        <tr>
+                            <td><strong>${log.timestamp}</strong></td>
+                            <td>Bus ${log.bus_id}</td>
+                            <td>${log.route_id}</td>
+                            <td class="text-muted">${log.previous_eta || 'N/A'}</td>
+                            <td><strong class="text-primary">${log.new_eta}</strong></td>
+                            <td>${deltaBadge}</td>
+                            <td><span class="small text-secondary">${log.reason}</span></td>
+                            <td><span class="small">${log.traffic_level}</span></td>
+                            <td>${log.student_count}</td>
+                            <td>${gpsBadge}</td>
+                            <td>${netBadge}</td>
+                            <td>${sourceBadge}</td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            })
+            .catch(err => {
+                console.error("Error loading history:", err);
+            });
+    }
+
+    document.getElementById('form-history-filter').addEventListener('submit', (e) => {
+        e.preventDefault();
+        loadHistory();
+    });
+
+    document.getElementById('btn-clear-filters').addEventListener('click', () => {
+        document.getElementById('filter-bus-id').value = 'all';
+        document.getElementById('filter-reason').value = '';
+        loadHistory();
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadHistory();
+    });
+</script>
+{% endblock %}

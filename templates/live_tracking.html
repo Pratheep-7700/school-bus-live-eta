@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Live Bus Tracking{% endblock %}
+{% block page_header %}Live GPS Tracking & Manual Fallback{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Map column -->
+    <div class="col-lg-8 mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-map-location text-success me-2"></i> Live Bus Tracking Map</h5>
+                <span class="badge bg-secondary" id="map-connection-badge">Map Source: OpenStreetMap</span>
+            </div>
+            <div class="card-body p-0">
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar for Manual updates & stats -->
+    <div class="col-lg-4">
+        <!-- Live status summary -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-bus text-success me-2"></i> Bus Registry</h5>
+            </div>
+            <div class="card-body p-3">
+                <div class="list-group list-group-flush" id="tracking-buses-list">
+                    <!-- Loaded dynamically via js -->
+                    <div class="text-center text-muted py-3">Loading buses...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Fallback Form -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-keyboard text-warning me-2"></i> Manual Driver Fallback</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info py-2 px-3 mb-3" style="font-size: 0.85rem;">
+                    <i class="fa-solid fa-circle-question"></i> Use this when automated GPS feeds fail. Mark current stop and ETA manually.
+                </div>
+                <form id="form-manual-fallback">
+                    <div class="mb-3">
+                        <label for="select-manual-bus" class="form-label">Select Bus</label>
+                        <select class="form-select" id="select-manual-bus" required>
+                            <option value="" disabled selected>Choose a bus...</option>
+                            <option value="101">Bus 101 (Route 1)</option>
+                            <option value="102">Bus 102 (Route 2)</option>
+                            <option value="103">Bus 103 (Route 3)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="input-manual-location" class="form-label">Current Driver Location</label>
+                        <input type="text" class="form-placeholder form-control" id="input-manual-location" placeholder="e.g. Near Oak St Intersection" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="select-manual-next-stop" class="form-label">Next Stop ID</label>
+                        <select class="form-select" id="select-manual-next-stop" required>
+                            <option value="" disabled selected>Select next stop...</option>
+                            <!-- Populated based on selected bus's route stops -->
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="input-manual-eta" class="form-label">Driver Estimated ETA</label>
+                        <input type="text" class="form-control" id="input-manual-eta" placeholder="e.g. 08:14 AM" required>
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100 text-white font-weight-bold">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Submit Manual ETA
+                    </button>
+                </form>
+                <div id="manual-fallback-message" class="alert alert-success d-none mt-3 py-2 text-center" role="alert">
+                    Manual ETA update recorded.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script>
+    document.getElementById('nav-tracking').classList.add('active');
+</script>
+{% endblock %}

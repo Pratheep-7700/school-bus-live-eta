@@ -1,0 +1,6 @@
+metric,baseline,proposed,improvement
+MAE (minutes),6.67,2.19,67.2%
+RMSE (minutes),7.36,2.66,63.9%
+Mean Delay (minutes),6.67,6.67,N/A
+ETA Updates Sent,0.0,474.0,+474 updates
+Customer Enquiries,3393.0,355.0,-89.54% reduction

@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+
+{% block title %}System Experiment{% endblock %}
+{% block page_header %}Baseline vs Proposed System Experiment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Experiment Overview -->
+    <div class="col-lg-12 mb-4">
+        <div class="card bg-white border-0 shadow-sm p-4">
+            <h5 class="font-weight-bold text-dark"><i class="fa-solid fa-square-poll-vertical text-primary me-2"></i> Experiment Methodology</h5>
+            <p class="text-muted m-0 mt-2">
+                To evaluate the accuracy of our Proposed Dynamic ETA system, we generated a simulated test suite consisting of <strong>550 historical bus trips</strong>. We evaluated two separate paradigms:
+            </p>
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <div class="p-3 bg-light rounded border h-100">
+                        <strong class="text-secondary"><i class="fa-solid fa-clock"></i> Baseline Schedule-Only System:</strong>
+                        <p class="m-0 text-muted small mt-1">
+                            Uses static planned stops schedules only. Completely ignores current traffic delays, passenger attendance boarding times, and real-time vehicle GPS positions.
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 bg-light rounded border h-100">
+                        <strong class="text-success"><i class="fa-solid fa-gauge-high"></i> Proposed Dynamic System:</strong>
+                        <p class="m-0 text-muted small mt-1">
+                            Calculates dynamic ETA = Current Time + Remaining Travel Time (derived from live GPS coordinates) + Boarding Dwell Time (calculated from student presence) + Traffic Delays.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Results Table -->
+    <div class="col-lg-8 mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-list-ol text-success me-2"></i> Experiment Results (550 Trips Analysis)</h5>
+            </div>
+            <div class="table-responsive px-3">
+                <table class="table table-hover align-middle table-custom">
+                    <thead>
+                        <tr>
+                            <th>Evaluation Metric</th>
+                            <th>Baseline System</th>
+                            <th>Proposed System</th>
+                            <th>Improvement / Change</th>
+                        </tr>
+                    </thead>
+                    <tbody id="experiment-results-table">
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-4">Loading experiment results...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enquiry reduction card -->
+    <div class="col-lg-4 mb-4">
+        <div class="card shadow-sm border-0 bg-primary text-white p-4 h-100 d-flex flex-column justify-content-between">
+            <div>
+                <h5 class="font-weight-bold"><i class="fa-solid fa-phone-slash me-2"></i> Enquiries Reduction</h5>
+                <p class="small mt-2" style="opacity: 0.85;">
+                    By communicating meaningful and explanation-supported ETA updates to parent/student portals, the school receives far fewer panic enquiries.
+                </p>
+            </div>
+            <div class="text-center my-4">
+                <h1 class="font-weight-bold display-4" id="metric-reduction-percent">0%</h1>
+                <span class="small font-weight-bold tracking-wide uppercase" style="opacity: 0.85;">Enquiry Calls Avoided</span>
+            </div>
+            <div class="p-2 rounded text-center small" style="background-color: rgba(255,255,255,0.15);">
+                Simulated call reduction metrics derived from error rates.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('nav-experiment').classList.add('active');
+
+    function loadExperiment() {
+        fetch('/api/experiment/results')
+            .then(res => res.json())
+            .then(data => {
+                const tbody = document.getElementById('experiment-results-table');
+                let html = '';
+                
+                data.metrics.forEach(m => {
+                    let improvement = '';
+                    let baselineVal = m.baseline_value;
+                    let proposedVal = m.proposed_value;
+                    
+                    if (m.metric_name === 'MAE' || m.metric_name === 'RMSE') {
+                        const diff = baselineVal - proposedVal;
+                        const pct = ((diff / baselineVal) * 100).toFixed(1);
+                        improvement = `<span class="text-success font-weight-bold"><i class="fa-solid fa-caret-down me-1"></i>${pct}% error reduction</span>`;
+                        baselineVal = `${baselineVal.toFixed(1)} mins`;
+                        proposedVal = `${proposedVal.toFixed(1)} mins`;
+                    } else if (m.metric_name === 'Status Enquiries') {
+                        const diff = baselineVal - proposedVal;
+                        const pct = ((diff / baselineVal) * 100).toFixed(1);
+                        improvement = `<span class="text-success font-weight-bold"><i class="fa-solid fa-caret-down me-1"></i>${pct}% calls reduction</span>`;
+                        baselineVal = `${parseInt(baselineVal)} calls`;
+                        proposedVal = `${parseInt(proposedVal)} calls`;
+                    } else if (m.metric_name === 'ETA Updates') {
+                        improvement = `<span class="text-muted small">Dynamic alert capability</span>`;
+                        baselineVal = `${parseInt(baselineVal)} updates`;
+                        proposedVal = `${parseInt(proposedVal)} updates`;
+                    } else { // Mean Delay
+                        improvement = `<span class="text-muted small">Environmental delay baseline</span>`;
+                        baselineVal = `${baselineVal.toFixed(1)} mins`;
+                        proposedVal = `${proposedVal.toFixed(1)} mins`;
+                    }
+
+                    html += `
+                        <tr>
+                            <td><strong>${m.metric_name}</strong></td>
+                            <td>${baselineVal}</td>
+                            <td><strong class="text-success">${proposedVal}</strong></td>
+                            <td>${improvement}</td>
+                        </tr>
+                    `;
+                });
+                
+                tbody.innerHTML = html;
+                document.getElementById('metric-reduction-percent').innerText = `${data.reduction_percentage}%`;
+            })
+            .catch(err => {
+                console.error("Error loading experiment metrics:", err);
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadExperiment();
+    });
+</script>
+{% endblock %}
