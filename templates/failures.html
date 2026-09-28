@@ -61,9 +61,15 @@
                 <div class="alert alert-danger py-2 px-3 mb-2 d-none" id="alert-fail-network">
                     <i class="fa-solid fa-triangle-exclamation me-1"></i> Network unavailable. Using store-and-forward mode.
                 </div>
-                <div class="p-2 bg-light border rounded text-center small font-weight-bold" id="queue-status-bar">
-                    Pending Offline Events: <span id="span-queue-count" class="text-primary fs-6">0</span>
+                <div class="p-2 bg-light border rounded text-center small font-weight-bold mb-2" id="queue-status-bar">
+                    Simulation Queue: <span id="span-queue-count" class="text-primary fs-6">0</span>
+                    <span class="mx-2 text-muted">|</span>
+                    IndexedDB Queue (<code>busTelemetryDB</code>): <span id="span-idb-queue-count" class="text-success fs-6">0</span>
                 </div>
+                <button type="button" class="btn btn-sm btn-outline-success w-100" id="btn-sync-idb" onclick="if(window.TelemetryBuffer){window.TelemetryBuffer.syncQueue();}">
+                    <i class="fa-solid fa-rotate me-1"></i> Sync IndexedDB Offline Buffer
+                </button>
+
             </div>
         </div>
     </div>

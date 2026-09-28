@@ -21,6 +21,48 @@ def init_db(force=False):
         conn.commit()
         conn.close()
         load_sample_data()
+    else:
+        # Ensure new tables are migrated on existing DB
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS eta_plan_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bus_id TEXT NOT NULL,
+                route_id TEXT,
+                trip_id TEXT,
+                stop_id TEXT,
+                event_type TEXT NOT NULL,
+                trigger_factor TEXT NOT NULL,
+                trigger_details TEXT,
+                previous_eta TEXT,
+                new_eta TEXT,
+                previous_delay_minutes REAL,
+                new_delay_minutes REAL,
+                previous_plan TEXT,
+                new_plan TEXT,
+                explanation TEXT,
+                telemetry_snapshot TEXT,
+                created_at TEXT NOT NULL,
+                created_by TEXT DEFAULT 'system'
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS processed_telemetry (
+                event_id TEXT PRIMARY KEY,
+                bus_id TEXT NOT NULL,
+                route_id TEXT,
+                trip_id TEXT,
+                timestamp TEXT NOT NULL,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                speed REAL NOT NULL,
+                received_at TEXT NOT NULL
+            );
+        """)
+        conn.commit()
+        conn.close()
+
 
 def load_sample_data():
     print("Loading sample data into SQLite...")
@@ -136,3 +178,154 @@ def load_sample_data():
         generate_experiment_dataset()
     except Exception as e:
         print(f"Notice: Experiment dataset initialization deferred ({e})")
+
+import json
+from datetime import datetime
+
+def insert_eta_plan_audit(
+    bus_id,
+    route_id=None,
+    trip_id=None,
+    stop_id=None,
+    event_type="ETA_RECALCULATION",
+    trigger_factor="UNKNOWN",
+    trigger_details=None,
+    previous_eta=None,
+    new_eta=None,
+    previous_delay_minutes=0.0,
+    new_delay_minutes=0.0,
+    previous_plan=None,
+    new_plan=None,
+    explanation=None,
+    telemetry_snapshot=None,
+    created_at=None,
+    created_by="system",
+    conn=None
+):
+    """
+    Appends an immutable audit entry to eta_plan_audit.
+    Normal operations must only insert records, never update or delete.
+    """
+    close_conn = False
+    if conn is None:
+        conn = get_db_connection()
+        close_conn = True
+
+    if not created_at:
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Serialize objects to JSON strings if passed as dict/list
+    if previous_plan is not None and not isinstance(previous_plan, str):
+        previous_plan = json.dumps(previous_plan)
+    if new_plan is not None and not isinstance(new_plan, str):
+        new_plan = json.dumps(new_plan)
+    if telemetry_snapshot is not None and not isinstance(telemetry_snapshot, str):
+        telemetry_snapshot = json.dumps(telemetry_snapshot)
+
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO eta_plan_audit (
+            bus_id, route_id, trip_id, stop_id, event_type,
+            trigger_factor, trigger_details, previous_eta, new_eta,
+            previous_delay_minutes, new_delay_minutes, previous_plan,
+            new_plan, explanation, telemetry_snapshot, created_at, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """, (
+        str(bus_id),
+        route_id,
+        trip_id,
+        stop_id,
+        str(event_type),
+        str(trigger_factor),
+        trigger_details,
+        previous_eta,
+        new_eta,
+        float(previous_delay_minutes) if previous_delay_minutes is not None else 0.0,
+        float(new_delay_minutes) if new_delay_minutes is not None else 0.0,
+        previous_plan,
+        new_plan,
+        explanation,
+        telemetry_snapshot,
+        str(created_at),
+        str(created_by)
+    ))
+    record_id = cursor.lastrowid
+    conn.commit()
+
+    if close_conn:
+        conn.close()
+
+    return record_id
+
+def query_eta_plan_audit(
+    bus_id=None,
+    route_id=None,
+    trip_id=None,
+    date=None,
+    trigger_factor=None,
+    limit=100,
+    offset=0
+):
+    """Queries audit records with filters."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = "SELECT * FROM eta_plan_audit WHERE 1=1"
+    params = []
+
+    if bus_id and bus_id != "all":
+        query += " AND bus_id = ?"
+        params.append(bus_id)
+    if route_id and route_id != "all":
+        query += " AND route_id = ?"
+        params.append(route_id)
+    if trip_id and trip_id != "all":
+        query += " AND trip_id = ?"
+        params.append(trip_id)
+    if date:
+        query += " AND created_at LIKE ?"
+        params.append(f"{date}%")
+    if trigger_factor and trigger_factor != "all":
+        query += " AND trigger_factor = ?"
+        params.append(trigger_factor)
+
+    query += " ORDER BY id DESC LIMIT ? OFFSET ?;"
+    params.extend([limit, offset])
+
+    cursor.execute(query, params)
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+def get_eta_plan_audit_by_id(record_id):
+    """Retrieves a single audit record by its primary key ID."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM eta_plan_audit WHERE id = ?;", (record_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def is_telemetry_processed(event_id):
+    """Checks if a telemetry event_id has already been processed for deduplication."""
+    if not event_id:
+        return False
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM processed_telemetry WHERE event_id = ? LIMIT 1;", (str(event_id),))
+    row = cursor.fetchone()
+    conn.close()
+    return row is not None
+
+def record_processed_telemetry(event_id, bus_id, route_id=None, trip_id=None, timestamp=None, latitude=0.0, longitude=0.0, speed=0.0):
+    """Records processed telemetry event to prevent duplicates."""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR IGNORE INTO processed_telemetry (
+            event_id, bus_id, route_id, trip_id, timestamp, latitude, longitude, speed, received_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """, (str(event_id), str(bus_id), route_id, trip_id, str(timestamp or now_str), float(latitude), float(longitude), float(speed), now_str))
+    conn.commit()
+    conn.close()
+

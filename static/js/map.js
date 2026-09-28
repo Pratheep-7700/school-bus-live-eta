@@ -108,19 +108,71 @@ function loadMapData() {
                         busMarkers[b.bus_id] = L.marker([lat, lon], { icon: busIcon }).addTo(map);
                     }
 
+                    // Visual status indicator helper
+                    let etaStatus = b.eta_status || (b.delay > 1 ? 'DELAYED' : (b.delay < -1 ? 'EARLY' : 'ON_TIME'));
+                    let statusBadge = '';
+                    let delayIndicatorText = '';
+                    let whyText = b.explanation || '';
+
+                    if (etaStatus === 'ON_TIME' || b.delay <= 1) {
+                        statusBadge = '<span class="badge bg-success text-white"><i class="fa-solid fa-circle-check me-1"></i>ON TIME</span>';
+                        delayIndicatorText = '<span class="text-success fw-bold">On Schedule</span>';
+                        whyText = 'Bus is currently on schedule.';
+                    } else if (etaStatus === 'DELAYED' || b.delay > 1) {
+                        statusBadge = `<span class="badge bg-danger text-white"><i class="fa-solid fa-clock-rotate-left me-1"></i>+${b.delay} min delayed</span>`;
+                        delayIndicatorText = `<span class="text-danger fw-bold">+${b.delay} min delayed</span>`;
+                        if (b.primary_reason === 'UNKNOWN_CAUSE' || !whyText) {
+                            whyText = 'Delay detected, but the cause could not be determined from available telemetry.';
+                        }
+                    } else if (etaStatus === 'EARLY') {
+                        const earlyM = Math.abs(Math.round(b.delay_minutes || 0));
+                        statusBadge = `<span class="badge bg-info text-white"><i class="fa-solid fa-forward me-1"></i>${earlyM}m early</span>`;
+                        delayIndicatorText = `<span class="text-info fw-bold">${earlyM} min ahead</span>`;
+                        whyText = `Bus is running ${earlyM} minutes ahead of schedule.`;
+                    } else {
+                        statusBadge = '<span class="badge bg-secondary text-white"><i class="fa-solid fa-circle-question me-1"></i>UNKNOWN</span>';
+                        delayIndicatorText = '<span class="text-secondary fw-bold">Unknown</span>';
+                        whyText = 'Delay detected, but the cause could not be determined from available telemetry.';
+                    }
+
+                    // Factors breakdown HTML
+                    let factorsHtml = '';
+                    if (b.factors && b.factors.length > 0) {
+                        factorsHtml = '<div class="mt-1 d-flex flex-wrap gap-1">';
+                        b.factors.forEach(f => {
+                            factorsHtml += `<span class="badge bg-white text-dark border small" style="font-size: 10px;">${f.factor}: +${f.impact_minutes}m</span>`;
+                        });
+                        factorsHtml += '</div>';
+                    }
+
                     // Update popup details
                     const popupHtml = `
-                        <div style="font-family: 'Inter', sans-serif; width: 200px;">
-                            <h6 style="margin: 0 0 5px 0; font-weight: bold; color: #212529;">Bus ${b.bus_id}</h6>
-                            <span style="font-size: 12px; color: #6c757d;">Driver: ${b.driver_name}</span>
-                            <hr style="margin: 5px 0;">
+                        <div style="font-family: 'Inter', sans-serif; width: 230px;">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <h6 style="margin: 0; font-weight: bold; color: #212529;">Bus ${b.bus_id}</h6>
+                                ${statusBadge}
+                            </div>
+                            <span style="font-size: 11px; color: #6c757d;">Route: ${b.route_id} • Driver: ${b.driver_name}</span>
+                            <hr style="margin: 6px 0;">
                             <div style="font-size: 12px; line-height: 1.5;">
-                                <strong>Route:</strong> ${b.route_id}<br>
-                                <strong>Speed:</strong> ${b.speed.toFixed(1)} km/h<br>
-                                <strong>Next Stop:</strong> ${b.next_stop_name}<br>
-                                <strong>ETA:</strong> <span style="color: #2b5c8f; font-weight: bold;">${b.eta}</span><br>
-                                <strong>Delay:</strong> <span style="color: ${b.delay > 0 ? '#c62828' : '#2e7d32'}; font-weight: bold;">${b.delay > 0 ? '+' + b.delay + ' min' : '0 min'}</span><br>
-                                <strong>Status:</strong> ${b.status}
+                                <div class="d-flex justify-content-between align-items-baseline mb-1">
+                                    <span style="font-size: 11px; font-weight: 700; color: #6c757d; text-transform: uppercase;">ETA</span>
+                                    <span style="color: #2b5c8f; font-weight: 700; font-size: 15px;">${b.eta}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span style="font-size: 11px; color: #6c757d;">Delay:</span>
+                                    ${delayIndicatorText}
+                                </div>
+                                <div class="text-muted small"><strong>Next Stop:</strong> ${b.next_stop_name}</div>
+                                <div class="text-muted small"><strong>Speed:</strong> ${b.speed.toFixed(1)} km/h</div>
+                            </div>
+                            <div class="mt-2 pt-2 border-top">
+                                <div style="font-size: 11px; font-weight: 700; color: #495057; text-transform: uppercase;">
+                                    <i class="fa-solid fa-circle-question text-primary me-1"></i> Why?
+                                </div>
+                                <div style="font-size: 11.5px; color: #212529; font-style: italic; margin-top: 2px;">
+                                    "${whyText}"
+                                </div>
                             </div>
                         </div>
                     `;
@@ -137,21 +189,62 @@ function loadMapData() {
                 if (listContainer) {
                     let sideHtml = '';
                     if (isActive) {
-                        const delayBadge = b.delay > 0 ? 
-                            `<span class="badge bg-danger ms-2">+${b.delay}m</span>` : 
-                            `<span class="badge bg-success ms-2">On Time</span>`;
+                        let etaStatus = b.eta_status || (b.delay > 1 ? 'DELAYED' : (b.delay < -1 ? 'EARLY' : 'ON_TIME'));
+                        let statusBadge = '';
+                        let whyText = b.explanation || '';
+
+                        if (etaStatus === 'ON_TIME' || b.delay <= 1) {
+                            statusBadge = '<span class="badge bg-success text-white"><i class="fa-solid fa-circle-check me-1"></i>ON TIME</span>';
+                            whyText = 'Bus is currently on schedule.';
+                        } else if (etaStatus === 'DELAYED' || b.delay > 1) {
+                            statusBadge = `<span class="badge bg-danger text-white"><i class="fa-solid fa-clock-rotate-left me-1"></i>+${b.delay} min delayed</span>`;
+                            if (b.primary_reason === 'UNKNOWN_CAUSE' || !whyText) {
+                                whyText = 'Delay detected, but the cause could not be determined from available telemetry.';
+                            }
+                        } else if (etaStatus === 'EARLY') {
+                            const earlyM = Math.abs(Math.round(b.delay_minutes || 0));
+                            statusBadge = `<span class="badge bg-info text-white"><i class="fa-solid fa-forward me-1"></i>${earlyM}m early</span>`;
+                            whyText = `Bus is running ${earlyM} minutes ahead of schedule.`;
+                        } else {
+                            statusBadge = '<span class="badge bg-secondary text-white"><i class="fa-solid fa-circle-question me-1"></i>UNKNOWN</span>';
+                            whyText = 'Delay detected, but the cause could not be determined from available telemetry.';
+                        }
+
+                        let factorsHtml = '';
+                        if (b.factors && b.factors.length > 0) {
+                            factorsHtml = '<div class="mt-1 d-flex flex-wrap gap-1">';
+                            b.factors.forEach(f => {
+                                factorsHtml += `<span class="badge bg-white text-dark border" style="font-size: 10px;">${f.factor}: +${f.impact_minutes}m</span>`;
+                            });
+                            factorsHtml += '</div>';
+                        }
                         
                         sideHtml = `
-                            <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3 border-0 border-bottom" onclick="focusBus('${b.bus_id}', ${lat}, ${lon})">
-                                <div>
-                                    <strong class="d-block text-dark"><i class="fa-solid fa-bus text-muted me-1"></i> Bus ${b.bus_id}</strong>
-                                    <span class="text-muted small">Heading to: ${b.next_stop_name}</span>
+                            <div class="list-group-item py-3 border-0 border-bottom">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <strong class="d-block text-dark"><i class="fa-solid fa-bus text-primary me-1"></i> Bus ${b.bus_id}</strong>
+                                        <span class="text-muted small">${b.route_id} • Next: ${b.next_stop_name}</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="text-muted small d-block" style="font-size: 10px; font-weight: 700; text-transform: uppercase;">ETA</span>
+                                        <strong class="text-primary d-block fs-5" style="line-height: 1.1;">${b.eta}</strong>
+                                        <div class="mt-1">${statusBadge}</div>
+                                    </div>
                                 </div>
-                                <div class="text-end">
-                                    <strong class="text-primary d-block">${b.eta}</strong>
-                                    ${delayBadge}
+                                <div class="p-2 rounded bg-light border" style="font-size: 12px;">
+                                    <div class="fw-bold text-secondary mb-1" style="font-size: 11px;">
+                                        <i class="fa-solid fa-circle-question text-primary me-1"></i> Why?
+                                    </div>
+                                    <div class="text-dark fst-italic">"${whyText}"</div>
+                                    ${factorsHtml}
                                 </div>
-                            </a>
+                                <div class="mt-2 text-end">
+                                    <button class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 11px;" onclick="focusBus('${b.bus_id}', ${lat}, ${lon})">
+                                        <i class="fa-solid fa-crosshairs me-1"></i> Focus Map
+                                    </button>
+                                </div>
+                            </div>
                         `;
                     } else {
                         sideHtml = `
@@ -172,6 +265,7 @@ function focusBus(busId, lat, lon) {
         busMarkers[busId].openPopup();
     }
 }
+
 
 // Bind Manual fallback choices helper
 const manualBusSelect = document.getElementById('select-manual-bus');
@@ -240,12 +334,111 @@ if (fallbackForm) {
     });
 }
 
+// Store-and-Forward Telemetry Simulation & Buffer handlers
+function updateMapBufferCount() {
+    if (window.TelemetryBuffer) {
+        window.TelemetryBuffer.getQueueCount().then(count => {
+            const countEl = document.getElementById('live-buffer-count');
+            if (countEl) countEl.innerText = count;
+        });
+    }
+}
+
+window.addEventListener('telemetryQueueChanged', function(e) {
+    const countEl = document.getElementById('live-buffer-count');
+    if (countEl && e.detail) {
+        countEl.innerText = e.detail.count;
+    }
+});
+
+const btnSendTelemetry = document.getElementById('btn-send-sim-telemetry');
+if (btnSendTelemetry) {
+    btnSendTelemetry.addEventListener('click', function() {
+        if (!window.TelemetryBuffer) return;
+        
+        const simLat = 37.7949 + (Math.random() - 0.5) * 0.008;
+        const simLon = -122.4394 + (Math.random() - 0.5) * 0.008;
+        const simSpeed = 25.0 + Math.random() * 10.0;
+        
+        const telemetry = {
+            event_id: window.TelemetryBuffer.generateUUID(),
+            bus_id: '101',
+            route_id: 'Route 1',
+            trip_id: 'TRIP-Route1',
+            latitude: simLat,
+            longitude: simLon,
+            speed: parseFloat(simSpeed.toFixed(1))
+        };
+
+        const alertBox = document.getElementById('telemetry-buffer-alert');
+        btnSendTelemetry.disabled = true;
+
+        window.TelemetryBuffer.sendOrBufferTelemetry(telemetry)
+            .then(res => {
+                btnSendTelemetry.disabled = false;
+                if (alertBox) {
+                    alertBox.classList.remove('d-none', 'alert-success', 'alert-warning', 'alert-info');
+                    if (res.status === 'SENT') {
+                        alertBox.classList.add('alert-success');
+                        alertBox.innerHTML = `<strong><i class="fa-solid fa-circle-check me-1"></i> Sent Live:</strong> Bus 101 GPS ingested. New ETA: <strong>${res.data.eta || 'N/A'}</strong>`;
+                    } else {
+                        alertBox.classList.add('alert-warning');
+                        alertBox.innerHTML = `<strong><i class="fa-solid fa-hard-drive me-1"></i> Offline Mode:</strong> Telemetry buffered in IndexedDB (<code>busTelemetryDB</code>). Event ID: <code>${res.data.event_id.slice(0, 8)}...</code>`;
+                    }
+                    setTimeout(() => alertBox.classList.add('d-none'), 5000);
+                }
+                updateMapBufferCount();
+                loadMapData();
+            })
+            .catch(err => {
+                btnSendTelemetry.disabled = false;
+                console.error("Telemetry send error:", err);
+            });
+    });
+}
+
+const btnSyncBuffer = document.getElementById('btn-sync-buffer');
+if (btnSyncBuffer) {
+    btnSyncBuffer.addEventListener('click', function() {
+        if (!window.TelemetryBuffer) return;
+        btnSyncBuffer.disabled = true;
+        const alertBox = document.getElementById('telemetry-buffer-alert');
+
+        window.TelemetryBuffer.syncQueue()
+            .then(res => {
+                btnSyncBuffer.disabled = false;
+                if (alertBox) {
+                    alertBox.classList.remove('d-none', 'alert-success', 'alert-warning', 'alert-info');
+                    if (res.reason === 'NETWORK_OFFLINE') {
+                        alertBox.classList.add('alert-warning');
+                        alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Cannot sync: Network failure state is active.';
+                    } else if (res.synced_count > 0 || res.duplicate_count > 0) {
+                        alertBox.classList.add('alert-success');
+                        alertBox.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i> Synchronized <strong>${res.synced_count}</strong> events (${res.duplicate_count} deduplicated).`;
+                    } else {
+                        alertBox.classList.add('alert-info');
+                        alertBox.innerHTML = '<i class="fa-solid fa-circle-info me-1"></i> Queue is empty. No pending telemetry to sync.';
+                    }
+                    setTimeout(() => alertBox.classList.add('d-none'), 5000);
+                }
+                updateMapBufferCount();
+                loadMapData();
+            })
+            .catch(err => {
+                btnSyncBuffer.disabled = false;
+                console.error("Sync error:", err);
+            });
+    });
+}
+
 // Attach load to window
 window.loadMapData = loadMapData;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
+    updateMapBufferCount();
     // Poll map data updates every 4 seconds
     setInterval(loadMapData, 4000);
 });
+

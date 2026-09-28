@@ -33,6 +33,40 @@
             </div>
         </div>
 
+        <!-- Store-and-Forward Telemetry Simulation & IndexedDB Buffer -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 font-weight-bold text-dark">
+                    <i class="fa-solid fa-hard-drive text-primary me-2"></i> Store-and-Forward Buffer
+                </h5>
+                <span class="badge bg-secondary" id="client-buffer-badge">IndexedDB</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">
+                    Persistent client-side telemetry buffer (<code style="font-size: 11px;">busTelemetryDB</code> &rarr; <code style="font-size: 11px;">telemetry_queue</code>).
+                    Guarantees telemetry is not lost during outages and automatically resynchronizes on reconnection.
+                </p>
+                <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded border mb-3">
+                    <span class="small font-weight-bold text-secondary">Buffered Offline Events:</span>
+                    <span class="badge bg-primary fs-6 px-2 py-1" id="live-buffer-count">0</span>
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <button type="button" class="btn btn-sm btn-outline-primary w-100" id="btn-send-sim-telemetry">
+                            <i class="fa-solid fa-location-arrow me-1"></i> Push GPS Event
+                        </button>
+                    </div>
+                    <div class="col-6">
+                        <button type="button" class="btn btn-sm btn-success w-100" id="btn-sync-buffer">
+                            <i class="fa-solid fa-rotate me-1"></i> Sync Buffer
+                        </button>
+                    </div>
+                </div>
+                <div id="telemetry-buffer-alert" class="alert alert-info py-2 px-3 mt-3 mb-0 small d-none" role="alert">
+                </div>
+            </div>
+        </div>
+
         <!-- Manual Fallback Form -->
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-header bg-white border-0 py-3">
@@ -78,6 +112,7 @@
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}

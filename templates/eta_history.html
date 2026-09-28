@@ -1,15 +1,111 @@
 {% extends 'base.html' %}
 
-{% block title %}ETA Audit History{% endblock %}
-{% block page_header %}ETA History & Audit Log{% endblock %}
+{% block title %}ETA Audit Trail & History{% endblock %}
+{% block page_header %}ETA Audit Trail & Ledger{% endblock %}
 
 {% block content %}
-<div class="row">
-    <!-- Filter Card -->
-    <div class="col-lg-12 mb-4">
-        <div class="card shadow-sm border-0">
+<!-- Section Tabs -->
+<ul class="nav nav-pills mb-4 bg-white p-2 rounded shadow-sm border" id="auditTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active font-weight-bold" id="tab-audit-trail" data-bs-toggle="pill" data-bs-target="#content-audit-trail" type="button" role="tab" aria-controls="content-audit-trail" aria-selected="true">
+            <i class="fa-solid fa-shield-halved text-primary me-2"></i> Immutable ETA Plan Audit Trail
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link font-weight-bold" id="tab-legacy-history" data-bs-toggle="pill" data-bs-target="#content-legacy-history" type="button" role="tab" aria-controls="content-legacy-history" aria-selected="false">
+            <i class="fa-solid fa-clock-rotate-left me-2"></i> Telemetry Modification History
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="auditTabsContent">
+    <!-- TAB 1: IMMUTABLE ETA PLAN AUDIT TRAIL -->
+    <div class="tab-pane fade show active" id="content-audit-trail" role="tabpanel" aria-labelledby="tab-audit-trail">
+        <!-- Filter Card -->
+        <div class="card shadow-sm border-0 mb-4">
             <div class="card-header bg-white border-0 py-3">
-                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-filter text-primary me-2"></i> Filter Logs</h5>
+                <h5 class="m-0 font-weight-bold text-dark"><i class="fa-solid fa-filter text-primary me-2"></i> Filter Audit Records</h5>
+            </div>
+            <div class="card-body">
+                <form id="form-audit-filter" class="row align-items-end g-3">
+                    <div class="col-md-3">
+                        <label for="audit-filter-bus" class="form-label font-weight-bold small">Bus ID</label>
+                        <select class="form-select" id="audit-filter-bus">
+                            <option value="all">All Buses</option>
+                            <option value="101">Bus 101</option>
+                            <option value="102">Bus 102</option>
+                            <option value="103">Bus 103</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="audit-filter-trigger" class="form-label font-weight-bold small">Trigger Factor</label>
+                        <select class="form-select" id="audit-filter-trigger">
+                            <option value="all">All Triggers</option>
+                            <option value="HIGH_BOARDING_TIME">HIGH_BOARDING_TIME</option>
+                            <option value="TRAFFIC_DELAY">TRAFFIC_DELAY</option>
+                            <option value="ROUTE_TRAVEL_DELAY">ROUTE_TRAVEL_DELAY</option>
+                            <option value="GPS_TELEMETRY">GPS_TELEMETRY</option>
+                            <option value="GPS_SIGNAL_LOSS">GPS_SIGNAL_LOSS</option>
+                            <option value="SENSOR_DISCREPANCY">SENSOR_DISCREPANCY</option>
+                            <option value="MANUAL_OVERRIDE">MANUAL_OVERRIDE</option>
+                            <option value="NETWORK_SYNC">NETWORK_SYNC</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="audit-filter-date" class="form-label font-weight-bold small">Date Filter</label>
+                        <input type="date" class="form-control" id="audit-filter-date">
+                    </div>
+                    <div class="col-md-3 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1">
+                            <i class="fa-solid fa-magnifying-glass me-1"></i> Filter
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="btn-clear-audit-filters">
+                            <i class="fa-solid fa-eraser"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Audit Trail Table Card -->
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 font-weight-bold text-dark">
+                    <i class="fa-solid fa-book-bookmark text-primary me-2"></i> ETA Plan Audit Records (Append-Only)
+                </h5>
+                <span class="badge bg-light text-dark border" id="audit-records-count">Loading records...</span>
+            </div>
+            <div class="table-responsive px-3">
+                <table class="table table-hover align-middle table-custom mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 35px;"></th>
+                            <th>Timestamp</th>
+                            <th>Bus</th>
+                            <th>Route</th>
+                            <th>Previous ETA</th>
+                            <th>New ETA</th>
+                            <th>Delay Change</th>
+                            <th>Trigger</th>
+                            <th>Explanation</th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-trail-table-body">
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">Loading audit trail...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: LEGACY TELEMETRY HISTORY -->
+    <div class="tab-pane fade" id="content-legacy-history" role="tabpanel" aria-labelledby="tab-legacy-history">
+        <!-- Legacy Filter Card -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-filter text-primary me-2"></i> Filter Telemetry Logs</h5>
             </div>
             <div class="card-body">
                 <form id="form-history-filter" class="row align-items-end g-3">
@@ -39,12 +135,7 @@
                 </form>
             </div>
         </div>
-    </div>
-</div>
 
-<div class="row">
-    <!-- Audit Table Card -->
-    <div class="col-lg-12">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white border-0 py-3">
                 <h5 class="m-0 font-weight-bold"><i class="fa-solid fa-clock-rotate-left text-primary me-2"></i> ETA Modification Logs</h5>
@@ -83,6 +174,189 @@
 <script>
     document.getElementById('nav-history').classList.add('active');
 
+    // =========================================================================
+    // 1. IMMUTABLE ETA PLAN AUDIT TRAIL LOGIC (IMPROVEMENT 2)
+    // =========================================================================
+    function loadAuditTrail() {
+        const busId = document.getElementById('audit-filter-bus').value;
+        const trigger = document.getElementById('audit-filter-trigger').value;
+        const date = document.getElementById('audit-filter-date').value;
+
+        let params = new URLSearchParams();
+        if (busId && busId !== 'all') params.append('bus_id', busId);
+        if (trigger && trigger !== 'all') params.append('trigger_factor', trigger);
+        if (date) params.append('date', date);
+
+        fetch(`/api/audit/eta?${params.toString()}`)
+            .then(res => res.json())
+            .then(records => {
+                const tbody = document.getElementById('audit-trail-table-body');
+                const countBadge = document.getElementById('audit-records-count');
+                countBadge.innerText = `${records.length} records found`;
+
+                if (!records || records.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="fa-regular fa-folder-open fs-4 d-block mb-2"></i>
+                                No audit trail records found. Push telemetry or run simulation ticks.
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                records.forEach((record, idx) => {
+                    const delayDiff = (record.new_delay_minutes || 0) - (record.previous_delay_minutes || 0);
+                    let deltaBadge = '';
+                    if (delayDiff > 0) {
+                        deltaBadge = `<span class="badge bg-danger text-white">+${delayDiff.toFixed(1)}m</span>`;
+                    } else if (delayDiff < 0) {
+                        deltaBadge = `<span class="badge bg-success text-white">${delayDiff.toFixed(1)}m</span>`;
+                    } else {
+                        deltaBadge = `<span class="badge bg-secondary text-white">0.0m</span>`;
+                    }
+
+                    // Trigger badge colors
+                    let triggerColor = 'bg-secondary';
+                    if (record.trigger_factor === 'HIGH_BOARDING_TIME') triggerColor = 'bg-warning text-dark';
+                    else if (record.trigger_factor === 'TRAFFIC_DELAY') triggerColor = 'bg-danger text-white';
+                    else if (record.trigger_factor === 'GPS_TELEMETRY') triggerColor = 'bg-primary text-white';
+                    else if (record.trigger_factor === 'MANUAL_OVERRIDE') triggerColor = 'bg-dark text-white';
+                    else if (record.trigger_factor === 'NETWORK_SYNC') triggerColor = 'bg-info text-white';
+
+                    // Parse formatted JSON snapshots
+                    let telemetryJson = '';
+                    try {
+                        telemetryJson = record.telemetry_snapshot ? JSON.stringify(JSON.parse(record.telemetry_snapshot), null, 2) : 'No snapshot recorded';
+                    } catch (e) {
+                        telemetryJson = record.telemetry_snapshot || 'N/A';
+                    }
+
+                    let prevPlanJson = '';
+                    try {
+                        prevPlanJson = record.previous_plan ? JSON.stringify(JSON.parse(record.previous_plan), null, 2) : 'N/A';
+                    } catch (e) {
+                        prevPlanJson = record.previous_plan || 'N/A';
+                    }
+
+                    let newPlanJson = '';
+                    try {
+                        newPlanJson = record.new_plan ? JSON.stringify(JSON.parse(record.new_plan), null, 2) : 'N/A';
+                    } catch (e) {
+                        newPlanJson = record.new_plan || 'N/A';
+                    }
+
+                    const detailRowId = `audit-detail-${record.id}`;
+
+                    html += `
+                        <tr style="cursor: pointer;" onclick="toggleAuditDetail('${detailRowId}', this)">
+                            <td class="text-center text-muted">
+                                <i class="fa-solid fa-chevron-right chevron-icon" id="chevron-${detailRowId}"></i>
+                            </td>
+                            <td><span class="small font-monospace">${record.created_at}</span></td>
+                            <td><strong class="text-dark"><i class="fa-solid fa-bus text-muted me-1"></i>BUS-${record.bus_id}</strong></td>
+                            <td><span class="badge bg-light text-dark border">${record.route_id || 'N/A'}</span></td>
+                            <td class="text-muted">${record.previous_eta || '08:00 AM'}</td>
+                            <td><strong class="text-primary">${record.new_eta || '08:00 AM'}</strong></td>
+                            <td>${deltaBadge}</td>
+                            <td><span class="badge ${triggerColor}">${record.trigger_factor}</span></td>
+                            <td><span class="small text-secondary fst-italic">"${record.explanation || 'ETA recalculated.'}"</span></td>
+                        </tr>
+                        <!-- Expandable Detailed Section -->
+                        <tr id="${detailRowId}" class="d-none bg-light">
+                            <td colspan="9" class="p-3">
+                                <div class="card border-0 shadow-sm p-3 bg-white rounded">
+                                    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                        <h6 class="m-0 font-weight-bold text-dark">
+                                            <i class="fa-solid fa-circle-info text-primary me-2"></i> Audit Record #${record.id} Detailed Breakdown
+                                        </h6>
+                                        <span class="badge bg-secondary">Event: ${record.event_type} • Created By: ${record.created_by}</span>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <div class="p-2 border rounded bg-light mb-2">
+                                                <strong class="d-block small text-secondary uppercase"><i class="fa-solid fa-bullhorn text-warning me-1"></i> Trigger Details</strong>
+                                                <span class="small">${record.trigger_details || 'Recalculation triggered by telemetry update.'}</span>
+                                            </div>
+                                            <div class="p-2 border rounded bg-light mb-2">
+                                                <strong class="d-block small text-secondary uppercase"><i class="fa-solid fa-comment-dots text-info me-1"></i> Natural Language Explanation</strong>
+                                                <span class="small fst-italic">"${record.explanation || 'No explanation provided.'}"</span>
+                                            </div>
+                                            <div class="p-2 border rounded bg-light">
+                                                <strong class="d-block small text-secondary uppercase"><i class="fa-solid fa-code-compare text-success me-1"></i> Plan Shift Timeline</strong>
+                                                <span class="small d-block">Previous ETA: <code>${record.previous_eta || 'N/A'}</code> &rarr; New ETA: <strong class="text-primary">${record.new_eta}</strong></span>
+                                                <span class="small text-muted">Delay Shift: ${record.previous_delay_minutes}m &rarr; ${record.new_delay_minutes}m (${deltaBadge})</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="border rounded p-2 bg-light mb-2">
+                                                <strong class="d-block small text-secondary mb-1"><i class="fa-solid fa-satellite-dish text-primary me-1"></i> Telemetry Snapshot</strong>
+                                                <pre class="m-0 small text-dark p-2 bg-white border rounded" style="max-height: 120px; overflow-y: auto; font-size: 11px;">${telemetryJson}</pre>
+                                            </div>
+                                            <div class="border rounded p-2 bg-light">
+                                                <strong class="d-block small text-secondary mb-1"><i class="fa-solid fa-route text-primary me-1"></i> Route Plans (Previous vs New)</strong>
+                                                <div class="row g-2">
+                                                    <div class="col-6">
+                                                        <span class="small text-muted d-block" style="font-size: 10px;">Previous Plan:</span>
+                                                        <pre class="m-0 small text-dark p-1 bg-white border rounded" style="max-height: 80px; overflow-y: auto; font-size: 10px;">${prevPlanJson}</pre>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <span class="small text-muted d-block" style="font-size: 10px;">New Plan:</span>
+                                                        <pre class="m-0 small text-dark p-1 bg-white border rounded" style="max-height: 80px; overflow-y: auto; font-size: 10px;">${newPlanJson}</pre>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            })
+            .catch(err => {
+                console.error("Error loading audit trail:", err);
+            });
+    }
+
+    function toggleAuditDetail(detailId, rowEl) {
+        const detailRow = document.getElementById(detailId);
+        const chevron = document.getElementById(`chevron-${detailId}`);
+        if (!detailRow) return;
+
+        if (detailRow.classList.contains('d-none')) {
+            detailRow.classList.remove('d-none');
+            if (chevron) {
+                chevron.classList.remove('fa-chevron-right');
+                chevron.classList.add('fa-chevron-down');
+            }
+        } else {
+            detailRow.classList.add('d-none');
+            if (chevron) {
+                chevron.classList.remove('fa-chevron-down');
+                chevron.classList.add('fa-chevron-right');
+            }
+        }
+    }
+
+    document.getElementById('form-audit-filter').addEventListener('submit', (e) => {
+        e.preventDefault();
+        loadAuditTrail();
+    });
+
+    document.getElementById('btn-clear-audit-filters').addEventListener('click', () => {
+        document.getElementById('audit-filter-bus').value = 'all';
+        document.getElementById('audit-filter-trigger').value = 'all';
+        document.getElementById('audit-filter-date').value = '';
+        loadAuditTrail();
+    });
+
+    // =========================================================================
+    // 2. LEGACY HISTORY LOGS
+    // =========================================================================
     function loadHistory() {
         const busId = document.getElementById('filter-bus-id').value;
         const reason = encodeURIComponent(document.getElementById('filter-reason').value);
@@ -99,7 +373,7 @@
                 if (logs.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-4">No matching logs found in audit history.</td>
+                            <td colspan="12" class="text-center text-muted py-4">No matching logs found in history.</td>
                         </tr>
                     `;
                     return;
@@ -164,8 +438,14 @@
         loadHistory();
     });
 
+    // Auto-refresh when tabs switch or on interval
+    document.getElementById('tab-audit-trail').addEventListener('shown.bs.tab', () => loadAuditTrail());
+    document.getElementById('tab-legacy-history').addEventListener('shown.bs.tab', () => loadHistory());
+
     document.addEventListener('DOMContentLoaded', () => {
+        loadAuditTrail();
         loadHistory();
+        setInterval(loadAuditTrail, 5000);
     });
 </script>
 {% endblock %}

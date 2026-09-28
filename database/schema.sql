@@ -115,3 +115,39 @@ CREATE TABLE experiment_results (
     baseline_value REAL NOT NULL,
     proposed_value REAL NOT NULL
 );
+
+-- Immutable ETA Plan Audit Trail table
+CREATE TABLE IF NOT EXISTS eta_plan_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bus_id TEXT NOT NULL,
+    route_id TEXT,
+    trip_id TEXT,
+    stop_id TEXT,
+    event_type TEXT NOT NULL,
+    trigger_factor TEXT NOT NULL,
+    trigger_details TEXT,
+    previous_eta TEXT,
+    new_eta TEXT,
+    previous_delay_minutes REAL,
+    new_delay_minutes REAL,
+    previous_plan TEXT,
+    new_plan TEXT,
+    explanation TEXT,
+    telemetry_snapshot TEXT,
+    created_at TEXT NOT NULL,
+    created_by TEXT DEFAULT 'system'
+);
+
+-- Processed Telemetry Table for Store-and-Forward Deduplication
+CREATE TABLE IF NOT EXISTS processed_telemetry (
+    event_id TEXT PRIMARY KEY,
+    bus_id TEXT NOT NULL,
+    route_id TEXT,
+    trip_id TEXT,
+    timestamp TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    speed REAL NOT NULL,
+    received_at TEXT NOT NULL
+);
+

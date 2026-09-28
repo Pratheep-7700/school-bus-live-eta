@@ -35,6 +35,13 @@ function checkFailureStatus() {
             }
         })
         .catch(err => console.error("Error loading simulation state:", err));
+
+    if (window.TelemetryBuffer) {
+        window.TelemetryBuffer.getQueueCount().then(c => {
+            const idbEl = document.getElementById('span-idb-queue-count');
+            if (idbEl) idbEl.innerText = c;
+        });
+    }
 }
 
 function toggleFailure(caseName, isActive) {
@@ -49,8 +56,21 @@ function toggleFailure(caseName, isActive) {
     .then(data => {
         if (data.success) {
             checkFailureStatus();
-            if (caseName === 'network' && !isActive && data.synchronized_count > 0) {
-                alert(`${data.synchronized_count} events synchronized successfully from store-and-forward queue!`);
+            if (caseName === 'network' && !isActive) {
+                let msg = '';
+                if (data.synchronized_count > 0) {
+                    msg += `${data.synchronized_count} simulation events synchronized. `;
+                }
+                if (window.TelemetryBuffer) {
+                    window.TelemetryBuffer.syncQueue().then(syncRes => {
+                        if (syncRes && syncRes.synced_count > 0) {
+                            msg += `${syncRes.synced_count} client-side IndexedDB events synchronized!`;
+                        }
+                        if (msg) alert(msg);
+                    });
+                } else if (msg) {
+                    alert(msg);
+                }
             }
             if (window.refreshSimState) {
                 window.refreshSimState();
@@ -59,6 +79,7 @@ function toggleFailure(caseName, isActive) {
             alert("Failed to toggle failure status.");
         }
     })
+
     .catch(err => {
         console.error("Failed to toggle failure:", err);
         alert("Failed to toggle failure status.");

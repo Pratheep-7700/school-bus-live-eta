@@ -33,14 +33,26 @@ function loadDashboardData() {
 
                 let delayText = 'On Time';
                 let delayClass = 'text-success';
+                let whyExplanation = b.explanation || 'Bus is currently on schedule.';
+
                 if (isActive) {
-                    if (b.delay > 0) {
+                    if (b.delay > 1) {
                         delayedCount++;
                         delayText = `+${b.delay} mins`;
                         delayClass = 'text-danger font-weight-bold';
+                        if (b.primary_reason === 'UNKNOWN_CAUSE') {
+                            whyExplanation = 'Delay detected, but the cause could not be determined from available telemetry.';
+                        }
+                    } else if (b.delay < -1) {
+                        delayText = `${Math.abs(Math.round(b.delay_minutes || 0))}m early`;
+                        delayClass = 'text-info font-weight-bold';
                     } else {
                         onTimeCount++;
+                        delayText = 'On Time';
+                        whyExplanation = 'Bus is currently on schedule.';
                     }
+                } else {
+                    whyExplanation = 'Inactive bus.';
                 }
 
                 html += `
@@ -52,11 +64,13 @@ function loadDashboardData() {
                         <td><strong class="text-primary">${b.eta}</strong></td>
                         <td><span class="${delayClass}">${delayText}</span></td>
                         <td>${statusBadge}</td>
+                        <td><span class="small fst-italic text-secondary">${whyExplanation}</span></td>
                     </tr>
                 `;
             });
 
             tbody.innerHTML = html;
+
 
             // Set KPIs
             document.getElementById('kpi-total-buses').innerText = totalBuses;

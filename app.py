@@ -2,7 +2,12 @@ import os
 import pandas as pd
 import numpy as np
 from flask import Flask, render_template, jsonify, request
-from database.database import init_db, get_db_connection
+from database.database import (
+    init_db, get_db_connection, insert_eta_plan_audit,
+    query_eta_plan_audit, get_eta_plan_audit_by_id,
+    is_telemetry_processed, record_processed_telemetry
+)
+from services.eta_explanation_service import ETAExplanationService, explain_eta, build_bus_explanation
 from simulator.data_generator import generate_experiment_dataset, generate_sample_routes_csv
 from simulator.simulation import load_sim_state, save_sim_state, run_simulation_tick, reset_simulation, synchronize_network_queue
 from simulator.failure_simulator import set_failure_status, get_all_failures, is_failure_active
@@ -10,6 +15,7 @@ from eta_engine.eta_calculator import get_proposed_eta, str_to_minutes, minutes_
 from eta_engine.baseline import get_baseline_eta
 from eta_engine.explanation import explain_eta_difference
 import sqlite3
+
 
 app = Flask(__name__)
 
@@ -102,12 +108,26 @@ def get_buses():
                 bus['delay'] = max(0, eta_mins - planned_mins)
             else:
                 bus['delay'] = 0
+
+            # Natural Language Explanation & Structured Factors
+            exp_data = build_bus_explanation(bus_id, bus['next_stop_id'], bus['eta'], conn)
+            bus['delay_minutes'] = exp_data['delay_minutes']
+            bus['eta_status'] = exp_data['status']
+            bus['primary_reason'] = exp_data['primary_reason']
+            bus['explanation'] = exp_data['explanation']
+            bus['factors'] = exp_data['factors']
         else:
             bus['eta'] = 'N/A'
             bus['delay'] = 0
+            bus['delay_minutes'] = 0.0
+            bus['eta_status'] = 'UNKNOWN'
+            bus['primary_reason'] = 'INACTIVE'
+            bus['explanation'] = 'Bus is currently inactive.'
+            bus['factors'] = []
             bus['next_stop_name'] = 'N/A'
             
     conn.close()
+
     return jsonify(buses)
 
 @app.get('/api/routes')
@@ -181,10 +201,34 @@ def get_bus_eta(bus_id):
     if not bus_sim:
         return jsonify({'error': 'Bus not active'}), 400
         
-    etas, explanations = get_proposed_eta(bus_id, state['current_time'], bus_sim.get('next_stop_id'))
+    next_stop_id = bus_sim.get('next_stop_id')
+    etas, explanations = get_proposed_eta(bus_id, state['current_time'], next_stop_id)
+    next_stop_eta = etas.get(next_stop_id, bus_sim.get('last_eta', '08:00 AM'))
+
+    conn = get_db_connection()
+    exp_data = build_bus_explanation(bus_id, next_stop_id, next_stop_eta, conn)
+    
+    # Get next stop name
+    next_stop_name = ''
+    if next_stop_id:
+        cursor = conn.cursor()
+        cursor.execute("SELECT stop_name FROM stops WHERE stop_id = ?;", (next_stop_id,))
+        stop_row = cursor.fetchone()
+        if stop_row:
+            next_stop_name = stop_row['stop_name']
+    conn.close()
+
     return jsonify({
         'etas': etas,
-        'explanations': explanations
+        'explanations': explanations,
+        'eta': exp_data['eta'],
+        'delay_minutes': exp_data['delay_minutes'],
+        'status': exp_data['status'],
+        'primary_reason': exp_data['primary_reason'],
+        'explanation': exp_data['explanation'],
+        'factors': exp_data['factors'],
+        'next_stop_id': next_stop_id,
+        'next_stop_name': next_stop_name
     })
 
 @app.get('/api/history/<bus_id>')
@@ -286,6 +330,28 @@ def change_traffic():
               'OFFLINE' if is_failure_active('gps') else 'ONLINE',
               'OFFLINE' if is_network_offline else 'ONLINE',
               1, 'AUTO'))
+
+        # Log to immutable eta_plan_audit
+        insert_eta_plan_audit(
+            bus_id=bus_id,
+            route_id=route_id,
+            trip_id=f"TRIP-{route_id.replace(' ', '')}",
+            stop_id=next_stop_id,
+            event_type='TRAFFIC_UPDATE',
+            trigger_factor='TRAFFIC_DELAY',
+            trigger_details=f"Traffic level changed to {traffic_level} on {route_id}. Delay change: {eta_change:+.1f}m.",
+            previous_eta=prev_eta,
+            new_eta=new_eta,
+            previous_delay_minutes=prev_mins - str_to_minutes(planned_eta),
+            new_delay_minutes=new_mins - str_to_minutes(planned_eta),
+            previous_plan={'eta': prev_eta, 'stop_id': next_stop_id},
+            new_plan={'eta': new_eta, 'stop_id': next_stop_id, 'all_etas': etas},
+            explanation=reason_text,
+            telemetry_snapshot={'traffic_level': traffic_level, 'route_id': route_id},
+            created_at=state['current_time'],
+            created_by='dispatcher',
+            conn=conn
+        )
               
         # Push notification
         msg = f"Traffic level on {route_id} changed to {traffic_level}. Bus {bus_id} ETA is now {new_eta}."
@@ -337,6 +403,28 @@ def manual_eta():
           'OFFLINE' if is_failure_active('gps') else 'ONLINE',
           'OFFLINE' if is_failure_active('network') else 'ONLINE',
           1, 'MANUAL'))
+
+    # Save to immutable eta_plan_audit
+    insert_eta_plan_audit(
+        bus_id=bus_id,
+        route_id=route_id,
+        trip_id=f"TRIP-{route_id.replace(' ', '')}",
+        stop_id=next_stop_id,
+        event_type='MANUAL_OVERRIDE',
+        trigger_factor='MANUAL_OVERRIDE',
+        trigger_details=f"Driver manual ETA reported as {manual_eta_str} at {current_location}.",
+        previous_eta=prev_eta,
+        new_eta=manual_eta_str,
+        previous_delay_minutes=str_to_minutes(prev_eta) - str_to_minutes(planned_eta),
+        new_delay_minutes=str_to_minutes(manual_eta_str) - str_to_minutes(planned_eta),
+        previous_plan={'eta': prev_eta, 'stop_id': next_stop_id},
+        new_plan={'eta': manual_eta_str, 'stop_id': next_stop_id},
+        explanation=f"Manual fallback input at {current_location}",
+        telemetry_snapshot={'driver_location': current_location, 'manual_eta': manual_eta_str},
+        created_at=state['current_time'],
+        created_by='driver_fallback',
+        conn=conn
+    )
           
     # Insert notification
     msg = f"⚠️ Bus {bus_id} manual ETA updated to {manual_eta_str} by driver at {current_location}."
@@ -351,6 +439,230 @@ def manual_eta():
     conn.close()
     save_sim_state(state)
     return jsonify({'success': True, 'message': 'Manual ETA update recorded.'})
+
+# ==============================================================================
+# AUDIT TRAIL API (IMPROVEMENT 2)
+# ==============================================================================
+@app.get('/api/audit/eta')
+def get_audit_eta_records():
+    """
+    Returns audit trail records for ETA recalculations.
+    Supports filtering by bus_id, route_id, trip_id, date, and trigger_factor.
+    """
+    bus_id = request.args.get('bus_id')
+    route_id = request.args.get('route_id')
+    trip_id = request.args.get('trip_id')
+    date = request.args.get('date')
+    trigger_factor = request.args.get('trigger_factor')
+    limit = int(request.args.get('limit', 100))
+    offset = int(request.args.get('offset', 0))
+
+    records = query_eta_plan_audit(
+        bus_id=bus_id,
+        route_id=route_id,
+        trip_id=trip_id,
+        date=date,
+        trigger_factor=trigger_factor,
+        limit=limit,
+        offset=offset
+    )
+    return jsonify(records)
+
+@app.get('/api/audit/eta/<int:audit_id>')
+def get_audit_eta_record_by_id(audit_id):
+    """Returns the complete single audit record by primary key."""
+    record = get_eta_plan_audit_by_id(audit_id)
+    if not record:
+        return jsonify({'error': 'Audit record not found'}), 404
+    return jsonify(record)
+
+# ==============================================================================
+# TELEMETRY INGESTION & STORE-AND-FORWARD API (IMPROVEMENT 3)
+# ==============================================================================
+def process_single_telemetry(data, conn=None):
+    """
+    Core telemetry processing pipeline:
+    GPS telemetry -> API -> DB update -> ETA recalculation -> Audit record -> Deduplication.
+    """
+    close_conn = False
+    if conn is None:
+        conn = get_db_connection()
+        close_conn = True
+
+    event_id = data.get('event_id')
+    bus_id = str(data.get('bus_id', '')).replace('BUS-', '')
+    route_id = data.get('route_id')
+    trip_id = data.get('trip_id')
+    timestamp = data.get('timestamp')
+    lat = float(data.get('latitude', 0.0))
+    lon = float(data.get('longitude', 0.0))
+    speed = float(data.get('speed', 30.0))
+
+    if not bus_id:
+        if close_conn:
+            conn.close()
+        return {'status': 'ERROR', 'error': 'Missing bus_id'}
+
+    # 1. Deduplication check
+    if event_id and is_telemetry_processed(event_id):
+        if close_conn:
+            conn.close()
+        return {
+            'status': 'DUPLICATE',
+            'event_id': event_id,
+            'message': 'Telemetry event already processed. Skipped duplicate.'
+        }
+
+    # 2. Check if route_id not provided, fetch from DB
+    cursor = conn.cursor()
+    if not route_id:
+        cursor.execute("SELECT route_id FROM buses WHERE bus_id = ?;", (bus_id,))
+        b_row = cursor.fetchone()
+        if b_row:
+            route_id = b_row['route_id']
+
+    # 3. Update bus position and speed in DB
+    cursor.execute("""
+        UPDATE buses 
+        SET current_latitude = ?, current_longitude = ?, speed = ?, status = 'ON_ROUTE'
+        WHERE bus_id = ?;
+    """, (lat, lon, speed, bus_id))
+    conn.commit()
+
+    # 4. Dynamic ETA Recalculation
+    state = load_sim_state()
+    bus_sim = state.get('bus_states', {}).get(bus_id, {})
+    next_stop_id = bus_sim.get('next_stop_id')
+    prev_eta = bus_sim.get('last_eta', '08:00 AM')
+
+    current_time_str = state.get('current_time', '08:00 AM')
+    etas, _ = get_proposed_eta(bus_id, current_time_str, next_stop_id)
+    new_eta = etas.get(next_stop_id, prev_eta)
+
+    # 5. Natural Language Explanation
+    exp = build_bus_explanation(bus_id, next_stop_id, new_eta, conn)
+    
+    # Calculate delay diff
+    cursor.execute("SELECT planned_arrival_time FROM stops WHERE stop_id = ?;", (next_stop_id,))
+    stop_p = cursor.fetchone()
+    planned_arrival = stop_p['planned_arrival_time'] if stop_p else '08:00 AM'
+    prev_delay = str_to_minutes(prev_eta) - str_to_minutes(planned_arrival)
+    new_delay = exp['delay_minutes']
+
+    # 6. Insert into Immutable Audit Log (eta_plan_audit)
+    prev_plan = {'eta': prev_eta, 'stop_id': next_stop_id}
+    new_plan = {'eta': new_eta, 'stop_id': next_stop_id, 'all_etas': etas}
+    telemetry_snapshot = {
+        'event_id': event_id,
+        'latitude': lat,
+        'longitude': lon,
+        'speed': speed,
+        'route_id': route_id,
+        'trip_id': trip_id,
+        'timestamp': timestamp or state.get('current_time')
+    }
+
+    audit_id = insert_eta_plan_audit(
+        bus_id=bus_id,
+        route_id=route_id,
+        trip_id=trip_id or f"TRIP-{route_id.replace(' ', '') if route_id else '1'}",
+        stop_id=next_stop_id,
+        event_type='TELEMETRY_UPDATE',
+        trigger_factor='GPS_TELEMETRY',
+        trigger_details=f"Live GPS telemetry ({lat:.4f}, {lon:.4f}) received at {speed:.1f} km/h.",
+        previous_eta=prev_eta,
+        new_eta=new_eta,
+        previous_delay_minutes=prev_delay,
+        new_delay_minutes=new_delay,
+        previous_plan=prev_plan,
+        new_plan=new_plan,
+        explanation=exp['explanation'],
+        telemetry_snapshot=telemetry_snapshot,
+        created_at=state.get('current_time'),
+        created_by='telemetry_service',
+        conn=conn
+    )
+
+    # 7. Record processed telemetry to prevent future duplicates
+    if event_id:
+        record_processed_telemetry(
+            event_id=event_id,
+            bus_id=bus_id,
+            route_id=route_id,
+            trip_id=trip_id,
+            timestamp=timestamp or state.get('current_time'),
+            latitude=lat,
+            longitude=lon,
+            speed=speed
+        )
+
+    # 8. Update sim state
+    if bus_id in state.get('bus_states', {}):
+        state['bus_states'][bus_id]['last_eta'] = new_eta
+        save_sim_state(state)
+
+    if close_conn:
+        conn.close()
+
+    return {
+        'status': 'SUCCESS',
+        'event_id': event_id,
+        'audit_id': audit_id,
+        'bus_id': bus_id,
+        'eta': new_eta,
+        'delay_minutes': new_delay,
+        'explanation': exp['explanation'],
+        'primary_reason': exp['primary_reason'],
+        'eta_status': exp['status'],
+        'factors': exp['factors']
+    }
+
+@app.post('/api/telemetry')
+def ingest_telemetry():
+    """Ingests a single telemetry record with deduplication and ETA recalculation."""
+    data = request.json or {}
+    result = process_single_telemetry(data)
+    if result.get('status') == 'ERROR':
+        return jsonify(result), 400
+    return jsonify(result)
+
+@app.post('/api/telemetry/sync')
+@app.post('/api/telemetry/batch')
+def sync_telemetry_batch():
+    """
+    Synchronizes a batch of buffered telemetry records from client-side IndexedDB.
+    Guarantees deduplication and returns processed, duplicate, and error counts.
+    """
+    data = request.json or {}
+    items = data.get('batch') or data.get('records') or []
+    if not isinstance(items, list):
+        items = [items]
+
+    processed = 0
+    duplicates = 0
+    errors = []
+    results = []
+
+    conn = get_db_connection()
+    for item in items:
+        res = process_single_telemetry(item, conn=conn)
+        if res.get('status') == 'SUCCESS':
+            processed += 1
+        elif res.get('status') == 'DUPLICATE':
+            duplicates += 1
+        else:
+            errors.append(res)
+        results.append(res)
+    conn.close()
+
+    return jsonify({
+        'success': True,
+        'processed_count': processed,
+        'duplicate_count': duplicates,
+        'error_count': len(errors),
+        'results': results
+    })
+
 
 # Simulation controls
 @app.post('/api/simulation/start')

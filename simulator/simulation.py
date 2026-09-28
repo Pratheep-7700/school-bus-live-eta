@@ -1,7 +1,7 @@
 import json
 import os
 import sqlite3
-from database.database import get_db_connection
+from database.database import get_db_connection, insert_eta_plan_audit
 from eta_engine.eta_calculator import get_proposed_eta, str_to_minutes, minutes_to_str, haversine_distance, calculate_dwell_time, get_traffic_delay_minutes
 from eta_engine.explanation import explain_eta_difference
 from eta_engine.baseline import get_baseline_eta
@@ -363,6 +363,41 @@ def log_audit_history(conn, state, bus_id, route_id, previous_eta, new_eta, dela
               reason, traffic_level, student_count, dwell_time, gps_status,
               network_status, notification_sent, source))
 
+        # Determine trigger factor from reason
+        r_lower = (reason or '').lower()
+        if 'traffic' in r_lower:
+            tf = 'TRAFFIC_DELAY'
+        elif 'boarding' in r_lower or 'dwell' in r_lower:
+            tf = 'HIGH_BOARDING_TIME'
+        elif 'gps' in r_lower:
+            tf = 'GPS_SIGNAL_LOSS'
+        elif 'sensor' in r_lower:
+            tf = 'SENSOR_DISCREPANCY'
+        elif 'manual' in r_lower:
+            tf = 'MANUAL_OVERRIDE'
+        else:
+            tf = 'GPS_TELEMETRY'
+
+        insert_eta_plan_audit(
+            bus_id=bus_id,
+            route_id=route_id,
+            trip_id=f"TRIP-{route_id.replace(' ', '')}" if route_id else None,
+            event_type='SIMULATION_RECALCULATION',
+            trigger_factor=tf,
+            trigger_details=reason,
+            previous_eta=previous_eta,
+            new_eta=new_eta,
+            previous_delay_minutes=0.0,
+            new_delay_minutes=delay_minutes,
+            previous_plan={'eta': previous_eta},
+            new_plan={'eta': new_eta},
+            explanation=reason,
+            telemetry_snapshot={'traffic_level': traffic_level, 'student_count': student_count, 'dwell_time': dwell_time},
+            created_at=timestamp,
+            created_by='simulation_engine',
+            conn=conn
+        )
+
 def synchronize_network_queue():
     """Flushes the store-and-forward queue to the SQLite database once network is restored."""
     state = load_sim_state()
@@ -391,6 +426,26 @@ def synchronize_network_queue():
                   event['new_eta'], event['delay_minutes'], event['reason'], event['traffic_level'],
                   event['student_count'], event['dwell_time'], event['gps_status'],
                   event['network_status'], event['notification_sent'], event['source']))
+
+            insert_eta_plan_audit(
+                bus_id=event['bus_id'],
+                route_id=event.get('route_id'),
+                trip_id=f"TRIP-{event['route_id'].replace(' ', '')}" if event.get('route_id') else None,
+                event_type='NETWORK_SYNCHRONIZATION',
+                trigger_factor='NETWORK_SYNC',
+                trigger_details=f"Synchronized queued event after network recovery: {event.get('reason', '')}",
+                previous_eta=event.get('previous_eta'),
+                new_eta=event.get('new_eta'),
+                previous_delay_minutes=0.0,
+                new_delay_minutes=event.get('delay_minutes', 0.0),
+                previous_plan={'eta': event.get('previous_eta')},
+                new_plan={'eta': event.get('new_eta')},
+                explanation=event.get('reason'),
+                telemetry_snapshot=event,
+                created_at=event['timestamp'],
+                created_by='network_sync',
+                conn=conn
+            )
             
     conn.commit()
     conn.close()
@@ -400,3 +455,4 @@ def synchronize_network_queue():
     save_sim_state(state)
     
     return count
+
