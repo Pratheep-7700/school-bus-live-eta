@@ -310,10 +310,33 @@ def run_simulation_tick():
     return state
 
 def log_notification(conn, state, bus_id, message, msg_type, is_network_unavailable):
-    """Logs a notification. If network is offline, stores in store_and_forward queue."""
+    """
+    Logs an operational notification or queues it locally when the network is unavailable.
+
+    Purpose:
+        Implements store-and-forward edge caching for parent/admin notifications:
+        - When online: Directly persists the message into the SQLite notifications table.
+        - When offline: Caches the notification in state['store_and_forward_queue'] to prevent
+          message loss during transit through cellular dead zones.
+
+    Parameters:
+        conn (sqlite3.Connection): Open SQLite database connection.
+        state (dict): Current mutable simulation state dictionary.
+        bus_id (str): Identifier of the affected vehicle or 'ALL'.
+        message (str): Human-readable notification text.
+        msg_type (str): Severity classification ('INFO', 'WARNING', 'ALERT', 'CRITICAL').
+        is_network_unavailable (bool): Whether network outage simulation is currently active.
+
+    Returns:
+        None
+
+    Fallback Behavior:
+        If is_network_unavailable is True, appends to the in-memory queue without raising
+        network exceptions or failing the calling transaction.
+    """
     timestamp = state['current_time']
     if is_network_unavailable:
-        # Queue event for later synchronization
+        # Buffer event locally in queue for subsequent synchronization on recovery
         state['store_and_forward_queue'].append({
             'type': 'notification',
             'timestamp': timestamp,
@@ -331,7 +354,39 @@ def log_notification(conn, state, bus_id, message, msg_type, is_network_unavaila
 def log_audit_history(conn, state, bus_id, route_id, previous_eta, new_eta, delay_minutes,
                       reason, traffic_level, student_count, dwell_time, gps_status,
                       network_status, notification_sent, source, is_network_unavailable):
-    """Logs audit history. If network is offline, stores in store_and_forward queue."""
+    """
+    Records an immutable ETA change entry or queues it in store-and-forward buffer if offline.
+
+    Purpose:
+        Maintains an auditable, chronological record of every dynamic ETA modification.
+        Captures full telemetry context (attendance, dwell, traffic, sensor health) to guarantee
+        subsequent auditability by school administrators and transportation supervisors.
+
+    Parameters:
+        conn (sqlite3.Connection): Open SQLite database connection.
+        state (dict): Current simulation state dictionary.
+        bus_id (str): Vehicle identifier.
+        route_id (str): Assigned route identifier.
+        previous_eta (str): Prior ETA before this recalculation ('HH:MM AM/PM').
+        new_eta (str): Updated ETA ('HH:MM AM/PM').
+        delay_minutes (float): Net delta change in minutes.
+        reason (str): Natural language causal explanation summary.
+        traffic_level (str): Congestion level at time of change ('LOW', 'MEDIUM', 'HIGH').
+        student_count (int): Cumulative present passengers on remaining route legs.
+        dwell_time (float): Current or projected dwell duration in minutes.
+        gps_status (str): 'ONLINE' or 'OFFLINE'.
+        network_status (str): 'ONLINE' or 'OFFLINE'.
+        notification_sent (int): 1 if customer alert was triggered; 0 otherwise.
+        source (str): Update origin ('AUTO', 'MANUAL', 'FALLBACK').
+        is_network_unavailable (bool): Network failure flag.
+
+    Returns:
+        None
+
+    Fallback Behavior:
+        When offline, buffers the complete audit payload in store_and_forward_queue,
+        preserving event timestamp and parameters until reconnection.
+    """
     timestamp = state['current_time']
     if is_network_unavailable:
         state['store_and_forward_queue'].append({
@@ -363,7 +418,7 @@ def log_audit_history(conn, state, bus_id, route_id, previous_eta, new_eta, dela
               reason, traffic_level, student_count, dwell_time, gps_status,
               network_status, notification_sent, source))
 
-        # Determine trigger factor from reason
+        # Determine trigger factor category from explanation text
         r_lower = (reason or '').lower()
         if 'traffic' in r_lower:
             tf = 'TRAFFIC_DELAY'
@@ -399,7 +454,21 @@ def log_audit_history(conn, state, bus_id, route_id, previous_eta, new_eta, dela
         )
 
 def synchronize_network_queue():
-    """Flushes the store-and-forward queue to the SQLite database once network is restored."""
+    """
+    Flushes all buffered store-and-forward events to the SQLite database upon network restoration.
+
+    Purpose:
+        Reconciles offline telemetry and audit entries once cellular connectivity returns.
+        Iterates over the queued in-memory events, committing notifications to the `notifications`
+        table and audit updates to both `eta_history` and `eta_plan_audit` tables in order.
+
+    Returns:
+        int: Number of queued events successfully synchronized.
+
+    Fallback Behavior:
+        If queue is empty, immediately returns 0 without database locks or writes.
+        Empties state['store_and_forward_queue'] and persists updated simulation state upon success.
+    """
     state = load_sim_state()
     queue = state.get('store_and_forward_queue', [])
     if not queue:
@@ -455,4 +524,5 @@ def synchronize_network_queue():
     save_sim_state(state)
     
     return count
+
 

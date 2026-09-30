@@ -72,6 +72,15 @@ def feedback():
 # API Endpoints
 @app.get('/api/buses')
 def get_buses():
+    """
+    Retrieves all buses enriched with dynamic ETAs, next stop names, and natural-language explanations.
+
+    Category: ETA-related / Live Tracking
+    Request: None
+    Returns: JSON list of bus dictionaries including status, location, speed, eta, delay,
+             next_stop_name, primary_reason, and explanation.
+    Status Codes: 200 (Success), 500 (Internal Server Error)
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM buses;")
@@ -132,6 +141,15 @@ def get_buses():
 
 @app.get('/api/routes')
 def get_routes():
+    """
+    Retrieves all configured bus routes with nested stop sequences and coordinates.
+
+    Category: ETA-related / Route Planning
+    Request: None
+    Returns: JSON list of route dictionaries containing route_id, route_name, student_count,
+             and nested stops list ordered by sequence ASC.
+    Status Codes: 200 (Success), 500 (Internal Server Error)
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM routes;")
@@ -257,7 +275,21 @@ def get_bus_history(bus_id):
 
 @app.post('/api/attendance')
 def update_attendance():
-    data = request.json
+    """
+    Updates student attendance status ('Present' or 'Absent') and impacts intermediate stop dwell times.
+
+    Category: Attendance-related / Dynamic Dwell
+    Request Body:
+        {
+            "student_id": "S101",
+            "status": "Present" | "Absent"
+        }
+    Validation:
+        Requires non-empty student_id and status strictly within ['Present', 'Absent'].
+    Returns: JSON {"success": true}
+    Status Codes: 200 (Success), 400 (Invalid arguments)
+    """
+    data = request.json or {}
     student_id = data.get('student_id')
     status = data.get('status') # 'Present' or 'Absent'
     
@@ -273,7 +305,22 @@ def update_attendance():
 
 @app.post('/api/traffic')
 def change_traffic():
-    data = request.json
+    """
+    Updates the route traffic level ('LOW', 'MEDIUM', 'HIGH'), triggering dynamic ETA recalculation,
+    immutable audit trail logging, and customer push notifications.
+
+    Category: Traffic-related / ETA Recalculation
+    Request Body:
+        {
+            "route_id": "Route 1",
+            "traffic_level": "LOW" | "MEDIUM" | "HIGH"
+        }
+    Validation:
+        Requires valid route_id and traffic_level strictly within ['LOW', 'MEDIUM', 'HIGH'].
+    Returns: JSON {"success": true}
+    Status Codes: 200 (Success), 400 (Invalid arguments)
+    """
+    data = request.json or {}
     route_id = data.get('route_id')
     traffic_level = data.get('traffic_level') # 'LOW', 'MEDIUM', 'HIGH'
     
@@ -368,7 +415,23 @@ def change_traffic():
 
 @app.post('/api/manual-eta')
 def manual_eta():
-    data = request.json
+    """
+    Records a manual driver or dispatcher ETA override when automated telemetry is unavailable.
+
+    Category: Failure-testing-related / Driver Fallback
+    Request Body:
+        {
+            "bus_id": "101",
+            "manual_eta": "08:15 AM",
+            "location_name": "Near Oak St",
+            "next_stop_id": "Stop_A"
+        }
+    Validation:
+        Requires bus_id, manual_eta (format 'HH:MM AM/PM'), and next_stop_id.
+    Returns: JSON {"success": true, "message": "Manual ETA update recorded."}
+    Status Codes: 200 (Success), 400 (Invalid arguments)
+    """
+    data = request.json or {}
     bus_id = data.get('bus_id')
     manual_eta_str = data.get('manual_eta') # format HH:MM AM/PM
     current_location = data.get('location_name') # text name

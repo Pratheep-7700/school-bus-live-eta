@@ -76,8 +76,43 @@ class ETAExplanationService:
         manual_note: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Calculates and returns structured ETA explanation data.
-        Ensures reasons are strictly data-backed and includes mandatory fallback.
+        Calculates and returns structured ETA explanation data and natural-language narrative.
+
+        Purpose:
+            Evaluates causal factors contributing to vehicle delays and constructs a deterministic,
+            data-backed textual explanation suitable for parents and school administration.
+            Ranks contributing factors by impact magnitude (boarding delay, traffic, speed, fallbacks).
+
+        Parameters:
+            scheduled_arrival_time (str, optional): Planned schedule timetable arrival ('HH:MM AM/PM').
+            predicted_arrival_time (str, optional): Current dynamic ETA ('HH:MM AM/PM').
+            current_delay (float, optional): Precomputed delay in minutes; if None, derived from times.
+            previous_stop_boarding_time (float, optional): Measured dwell duration at previous stop in seconds.
+            average_boarding_time (float): District baseline stop dwell duration (default: 45.0 seconds).
+            traffic_delay (float): Congestion delay penalty in minutes (default: 0.0).
+            route_delay (float): Residual transit delay in minutes (default: 0.0).
+            distance_remaining (float, optional): Remaining route distance in kilometers.
+            current_bus_speed (float, optional): Current telemetry speed in km/h.
+            expected_travel_time (float, optional): Timetable leg transit time in minutes.
+            actual_or_est_travel_time (float, optional): Telemetry-derived leg transit time in minutes.
+            is_gps_fail (bool): Active GPS outage status flag.
+            is_sensor_abnormal (bool): Active speed sensor discrepancy status flag.
+            is_manual (bool): Manual dispatcher/driver override flag.
+            manual_note (str, optional): Dispatcher commentary accompanying manual override.
+
+        Returns:
+            dict: Structured explanation payload:
+                - 'eta' (str): Formatted predicted arrival time string.
+                - 'delay_minutes' (float): Total calculated delay relative to schedule.
+                - 'status' (str): Operational status ('ON_TIME', 'EARLY', 'DELAYED', 'UNKNOWN').
+                - 'primary_reason' (str): Machine-readable reason code constant.
+                - 'explanation' (str): Human-readable natural-language explanation sentence.
+                - 'factors' (list[dict]): Decomposed impact factors sorted by descending impact.
+
+        Fallback Behavior:
+            If delay cannot be computed from available parameters, gracefully returns status
+            'UNKNOWN' with explanation stating delay cause could not be determined from telemetry,
+            preventing UI crashes and avoiding fabricated explanations.
         """
         # Calculate delay in minutes
         delay_minutes = current_delay
@@ -288,6 +323,25 @@ def build_bus_explanation(bus_id: str, next_stop_id: Optional[str], predicted_et
     """
     Convenience helper to extract relevant telemetry and stop factors from SQLite
     and generate a fully structured natural language ETA explanation.
+
+    Purpose:
+        Queries real-time route progress, historical boarding time at the preceding stop,
+        traffic feed state, and hardware failure flags from the SQLite database, passing
+        them into the explanation rule engine.
+
+    Parameters:
+        bus_id (str): Unique bus identifier (e.g. '101').
+        next_stop_id (str, optional): Target upcoming stop identifier (e.g. 'Stop_B').
+        predicted_eta (str): Newly calculated ETA string ('HH:MM AM/PM').
+        conn (sqlite3.Connection): Open SQLite database connection.
+
+    Returns:
+        dict: Full structured explanation payload with 'status', 'primary_reason',
+        'explanation', and 'factors' list.
+
+    Fallback Behavior:
+        If next_stop_id is None or missing from the database, defaults to nominal baseline
+        parameters and provides graceful fallback without crashing.
     """
     cursor = conn.cursor()
     

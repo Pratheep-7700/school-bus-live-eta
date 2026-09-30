@@ -5,12 +5,45 @@ DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'school_bus.db')
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), 'schema.sql')
 
 def get_db_connection():
-    conn = sqlite3.connect(DATABASE_PATH)
+    """
+    Creates and returns an active SQLite database connection with row access by column name.
+
+    Purpose:
+        Central connection factory for all database interactions across the application.
+        Configures row_factory as sqlite3.Row for dictionary-like column access and sets
+        a 10-second busy timeout to mitigate SQLite table lock contention during concurrent
+        telemetry and web simulation requests.
+
+    Returns:
+        sqlite3.Connection: Active database connection handle.
+
+    Fallback Behavior:
+        If connection cannot be established (e.g. invalid path or file permission issue),
+        raises sqlite3.OperationalError which is captured at the API layer.
+    """
+    conn = sqlite3.connect(DATABASE_PATH, timeout=10.0)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db(force=False):
-    """Initializes the database using schema.sql and loads default sample data if empty or forced."""
+    """
+    Initializes database schema and populates sample routes, stops, buses, and students.
+
+    Purpose:
+        Bootstraps the SQLite database from schema.sql if the database file does not exist,
+        is empty, or if force initialization is requested. Also performs non-destructive
+        schema migrations on existing databases for audit and telemetry tables.
+
+    Parameters:
+        force (bool): If True, drops and recreates all tables, resetting the database.
+
+    Returns:
+        None
+
+    Fallback Behavior:
+        Safely attempts to create missing tables (eta_plan_audit, processed_telemetry)
+        on existing database instances to prevent migration crashes on startup.
+    """
     db_exists = os.path.exists(DATABASE_PATH)
     
     if force or not db_exists or os.path.getsize(DATABASE_PATH) == 0:
@@ -62,6 +95,7 @@ def init_db(force=False):
         """)
         conn.commit()
         conn.close()
+
 
 
 def load_sample_data():
@@ -203,8 +237,39 @@ def insert_eta_plan_audit(
     conn=None
 ):
     """
-    Appends an immutable audit entry to eta_plan_audit.
-    Normal operations must only insert records, never update or delete.
+    Appends an immutable audit entry to the eta_plan_audit table.
+
+    Purpose:
+        Maintains an append-only, tamper-evident audit ledger of every ETA recalculation,
+        traffic adjustment, telemetry ingestion, or manual driver override. Normal operations
+        must only append records to this table, never update or delete existing entries.
+
+    Parameters:
+        bus_id (str): Vehicle identifier.
+        route_id (str, optional): Route identifier.
+        trip_id (str, optional): Unique trip run identifier.
+        stop_id (str, optional): Target stop ID.
+        event_type (str): Category ('ETA_RECALCULATION', 'TRAFFIC_UPDATE', 'MANUAL_OVERRIDE', 'TELEMETRY_UPDATE', etc.).
+        trigger_factor (str): Machine-readable trigger ('GPS_TELEMETRY', 'TRAFFIC_DELAY', 'HIGH_BOARDING_TIME', etc.).
+        trigger_details (str, optional): Detailed text describing why the recalculation occurred.
+        previous_eta (str, optional): Prior ETA string ('HH:MM AM/PM').
+        new_eta (str, optional): Updated ETA string ('HH:MM AM/PM').
+        previous_delay_minutes (float): Delay relative to schedule prior to update.
+        new_delay_minutes (float): Delay relative to schedule after update.
+        previous_plan (dict or str, optional): Serialized prior route ETA schedule.
+        new_plan (dict or str, optional): Serialized updated route ETA schedule.
+        explanation (str, optional): Human-readable natural-language explanation.
+        telemetry_snapshot (dict or str, optional): Full telemetry readings at time of event.
+        created_at (str, optional): Timestamp string ('YYYY-MM-DD HH:MM:SS'); defaults to now.
+        created_by (str): Actor or subsystem ('system', 'dispatcher', 'driver_fallback', etc.).
+        conn (sqlite3.Connection, optional): Existing DB connection; if None, manages own connection.
+
+    Returns:
+        int: Primary key ID of the newly created audit row.
+
+    Fallback Behavior:
+        Automatically serializes dict/list payloads to JSON strings. If conn was None,
+        guarantees connection is closed in finally block.
     """
     close_conn = False
     if conn is None:
@@ -266,7 +331,28 @@ def query_eta_plan_audit(
     limit=100,
     offset=0
 ):
-    """Queries audit records with filters."""
+    """
+    Queries immutable audit records from eta_plan_audit supporting multi-parameter filtering.
+
+    Purpose:
+        Provides backend data retrieval for audit trail inspection interfaces, compliance reviews,
+        and post-incident timeline reconstruction.
+
+    Parameters:
+        bus_id (str, optional): Filter by vehicle identifier (or 'all').
+        route_id (str, optional): Filter by route identifier (or 'all').
+        trip_id (str, optional): Filter by trip run identifier (or 'all').
+        date (str, optional): Filter by date prefix ('YYYY-MM-DD').
+        trigger_factor (str, optional): Filter by specific causal trigger code (or 'all').
+        limit (int): Pagination page size (default: 100).
+        offset (int): Pagination record offset (default: 0).
+
+    Returns:
+        list[dict]: Ordered list of audit records (most recent first).
+
+    Fallback Behavior:
+        Ignores 'all' or empty filter parameters, returning unfiltered chronological results.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     query = "SELECT * FROM eta_plan_audit WHERE 1=1"
@@ -297,7 +383,22 @@ def query_eta_plan_audit(
     return rows
 
 def get_eta_plan_audit_by_id(record_id):
-    """Retrieves a single audit record by its primary key ID."""
+    """
+    Retrieves a single audit record by its primary key ID.
+
+    Purpose:
+        Supports deep inspection of full plans, previous plans, and telemetry snapshots
+        for a specific timeline event.
+
+    Parameters:
+        record_id (int): Primary key ID.
+
+    Returns:
+        dict or None: Audit row dictionary if found; None if record does not exist.
+
+    Fallback Behavior:
+        Safely returns None if row not found, allowing API to respond with 404 cleanly.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM eta_plan_audit WHERE id = ?;", (record_id,))
@@ -306,7 +407,22 @@ def get_eta_plan_audit_by_id(record_id):
     return dict(row) if row else None
 
 def is_telemetry_processed(event_id):
-    """Checks if a telemetry event_id has already been processed for deduplication."""
+    """
+    Checks if a telemetry event_id has already been processed for store-and-forward deduplication.
+
+    Purpose:
+        Guarantees idempotency when mobile clients or offline edge caches re-send buffered
+        telemetry batches upon network reconnection.
+
+    Parameters:
+        event_id (str): Unique UUID/string identifying the telemetry event.
+
+    Returns:
+        bool: True if already recorded in processed_telemetry; False otherwise.
+
+    Fallback Behavior:
+        Returns False if event_id is None or empty.
+    """
     if not event_id:
         return False
     conn = get_db_connection()
@@ -317,7 +433,29 @@ def is_telemetry_processed(event_id):
     return row is not None
 
 def record_processed_telemetry(event_id, bus_id, route_id=None, trip_id=None, timestamp=None, latitude=0.0, longitude=0.0, speed=0.0):
-    """Records processed telemetry event to prevent duplicates."""
+    """
+    Records a processed telemetry event to prevent duplicate processing on subsequent retries.
+
+    Purpose:
+        Maintains an indexed deduplication ledger of received telemetry UUIDs.
+        Uses INSERT OR IGNORE to prevent primary key violation exceptions during high-frequency retries.
+
+    Parameters:
+        event_id (str): Unique telemetry event UUID.
+        bus_id (str): Vehicle identifier.
+        route_id (str, optional): Route identifier.
+        trip_id (str, optional): Trip run identifier.
+        timestamp (str, optional): Vehicle generation timestamp.
+        latitude (float): Vehicle latitude.
+        longitude (float): Vehicle longitude.
+        speed (float): Vehicle speed in km/h.
+
+    Returns:
+        None
+
+    Fallback Behavior:
+        Uses INSERT OR IGNORE so conflicting identical UUIDs do not trigger database crashes.
+    """
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -328,4 +466,5 @@ def record_processed_telemetry(event_id, bus_id, route_id=None, trip_id=None, ti
     """, (str(event_id), str(bus_id), route_id, trip_id, str(timestamp or now_str), float(latitude), float(longitude), float(speed), now_str))
     conn.commit()
     conn.close()
+
 
